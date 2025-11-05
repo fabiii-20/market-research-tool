@@ -1,4 +1,4 @@
-export type AuthMode = "user" | "admin";
+export type AuthMode = "login";
 export type UserRole = "user" | "admin";
 export type Category = "All" | "News" | "Articles" | "Papers";
 
@@ -15,17 +15,37 @@ export interface Report {
   date: string;
   keywords: string[];
   user: string;
-  parameters: string;
+  categories?: Category[];
 }
 
-export interface UserLogin {
+export interface UserAccount {
+  id: string;
+  username: string;
   email: string;
-  loginTime: string;
-  name?: string;
+  password: string;
+  role: UserRole;
+  status: "active" | "inactive";
+  createdAt: string;
+  reportsCount: number;
 }
 
 export interface AuthFormData {
-  name?: string;
-  email: string;
+  username: string;
   password: string;
+}
+
+export interface ReportApiResponse {
+  reports: Report[];
+  totalUsers: number;
+  reportsGenerated: number;
+}
+
+export interface SearchActivity {
+  id: string;
+  userId: string;
+  username: string;
+  date: string;
+  keywords: string[];
+  categories: Category[];
+  timestamp: number;
 }

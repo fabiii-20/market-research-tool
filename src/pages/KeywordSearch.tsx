@@ -1,28 +1,39 @@
 import React, { useState, useRef, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import type { SearchResult, Category } from "../types";
 import { searchAPI } from "../services/api";
+import { authService } from "../services/authService";
+import { searchActivityService } from "../services/searchActivityService";
+
 
 export default function KeywordSearchPage() {
-  const [query, setQuery] = useState<string>("");
-  const [category, setCategory] = useState<Category>("All");
+  const navigate = useNavigate();
+  const [keywords, setKeywords] = useState<string[]>([]);
+  const [currentKeyword, setCurrentKeyword] = useState<string>("");
+  const [selectedCategories, setSelectedCategories] = useState<Category[]>(["All"]);
   const [loading, setLoading] = useState<boolean>(false);
   const [items, setItems] = useState<SearchResult[]>([]);
   const [hasSearched, setHasSearched] = useState<boolean>(false);
   const [hoveredId, setHoveredId] = useState<number | null>(null);
-  const [dropdownOpen, setDropdownOpen] = useState<boolean>(false);
+  const [categoryDropdownOpen, setCategoryDropdownOpen] = useState<boolean>(false);
+  const [profileDropdownOpen, setProfileDropdownOpen] = useState<boolean>(false);
   
   // Pagination state
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [totalPages, setTotalPages] = useState<number>(0);
   const [total, setTotal] = useState<number>(0);
 
-  const dropdownRef = useRef<HTMLDivElement>(null);
+  const categoryDropdownRef = useRef<HTMLDivElement>(null);
+  const profileDropdownRef = useRef<HTMLDivElement>(null);
 
-  // Close dropdown when clicking outside
+  // Close dropdowns when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setDropdownOpen(false);
+      if (categoryDropdownRef.current && !categoryDropdownRef.current.contains(event.target as Node)) {
+        setCategoryDropdownOpen(false);
+      }
+      if (profileDropdownRef.current && !profileDropdownRef.current.contains(event.target as Node)) {
+        setProfileDropdownOpen(false);
       }
     };
 
@@ -30,31 +41,51 @@ export default function KeywordSearchPage() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const fetchResults = async (page: number = 1) => {
-    if (!query.trim()) {
-      return;
-    }
+ const fetchResults = async (page: number = 1) => {
+  if (keywords.length === 0) return;
 
-    setLoading(true);
-    setHasSearched(true);
+  setLoading(true);
+  setHasSearched(true);
 
-    try {
-      // TODO: Replace with your real API
-      // const response = await fetch(`/api/search?q=${query}&category=${category}&page=${page}`);
-      // const data = await response.json();
-      
-      const data = await searchAPI.search(query, category, page, 4);
-      
-      setItems(data.results);
-      setTotal(data.total);
-      setTotalPages(data.totalPages);
-      setCurrentPage(page);
-    } catch (error) {
-      console.error("Search failed:", error);
-      setItems([]);
-    } finally {
-      setLoading(false);
+  // ✅ SAVE SEARCH ACTIVITY ONLY ON FIRST PAGE
+  if (page === 1) {
+    const currentUser = authService.getCurrentUser();
+    if (currentUser) {
+      searchActivityService.saveActivity(
+        currentUser.id,
+        currentUser.username,
+        keywords,
+        selectedCategories
+      );
     }
+  }
+
+  try {
+    const categoryToSearch = selectedCategories.includes("All") ? "All" : selectedCategories[0];
+    const data = await searchAPI.search(keywords.join(" "), categoryToSearch, page, 4);
+    
+    setItems(data.results);
+    setTotal(data.total);
+    setTotalPages(data.totalPages);
+    setCurrentPage(page);
+  } catch (error) {
+    console.error("Search failed:", error);
+    setItems([]);
+  } finally {
+    setLoading(false);
+  }
+};
+
+
+  const handleAddKeyword = () => {
+    if (currentKeyword.trim() && !keywords.includes(currentKeyword.trim())) {
+      setKeywords([...keywords, currentKeyword.trim()]);
+      setCurrentKeyword("");
+    }
+  };
+
+  const handleRemoveKeyword = (keyword: string) => {
+    setKeywords(keywords.filter((k) => k !== keyword));
   };
 
   const handleGetData = () => {
@@ -67,24 +98,28 @@ export default function KeywordSearchPage() {
     fetchResults(page);
   };
 
-  const handleCategorySelect = (cat: Category) => {
-    setCategory(cat);
-    setDropdownOpen(false);
-    // Auto-search if already searched
-    if (hasSearched && query.trim()) {
-      setCurrentPage(1);
-      searchAPI.search(query, cat, 1, 4).then((data) => {
-        setItems(data.results);
-        setTotal(data.total);
-        setTotalPages(data.totalPages);
-        setCurrentPage(1);
-      });
+  const handleCategoryToggle = (cat: Category) => {
+    if (cat === "All") {
+      setSelectedCategories(["All"]);
+    } else {
+      let newCategories = selectedCategories.filter((c) => c !== "All");
+      if (newCategories.includes(cat)) {
+        newCategories = newCategories.filter((c) => c !== cat);
+      } else {
+        newCategories.push(cat);
+      }
+      setSelectedCategories(newCategories.length === 0 ? ["All"] : newCategories);
     }
+  };
+
+  const handleLogout = () => {
+    authService.logout();
+    navigate("/");
   };
 
   const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") {
-      handleGetData();
+      handleAddKeyword();
     }
   };
 
@@ -117,6 +152,7 @@ export default function KeywordSearchPage() {
   };
 
   const categories: Category[] = ["All", "News", "Articles", "Papers"];
+  const categoryDisplay = selectedCategories.includes("All") ? "All Categories" : selectedCategories.join(", ");
 
   return (
     <div className="min-h-screen bg-[#1e1c2b]">
@@ -157,8 +193,31 @@ export default function KeywordSearchPage() {
                 />
               </svg>
             </button>
-            <div className="h-8 w-8 rounded-full bg-white overflow-hidden grid place-items-center">
-              <span className="text-white text-xs">👤</span>
+            
+            {/* Profile Dropdown */}
+            <div className="relative" ref={profileDropdownRef}>
+              <button 
+                onClick={() => setProfileDropdownOpen(!profileDropdownOpen)}
+                className="h-8 w-8 rounded-full bg-white/20 overflow-hidden grid place-items-center hover:bg-white/30 transition"
+              >
+                <span className="text-white text-xs">👤</span>
+              </button>
+              
+              {profileDropdownOpen && (
+                <div className="absolute top-full mt-2 right-0 bg-white rounded-lg shadow-lg z-50 min-w-[150px] py-1">
+                  <button
+                    onClick={handleLogout}
+                    className="w-full text-left px-4 py-2 text-gray-700 hover:bg-gray-100 flex items-center gap-2"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+  <polyline points="16 17 21 12 16 7" />
+  <line x1="21" y1="12" x2="9" y2="12" />
+</svg>
+                    Logout
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -168,92 +227,114 @@ export default function KeywordSearchPage() {
       <main className="px-6 md:px-10 pb-10">
         <div className="mx-auto max-w-6xl rounded-2xl bg-white shadow-[0_30px_80px_rgba(0,0,0,0.35)]">
           {/* Search row */}
-          <div className="p-6 md:p-8">
-            <div className="flex flex-col lg:flex-row gap-3">
-              <div className="flex-1">
-                <div className="rounded-xl ring-1 ring-gray-200 bg-white px-4 py-3 flex items-center gap-3">
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    className="h-5 w-5 text-gray-400"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                  >
-                    <circle cx="11" cy="11" r="7" strokeWidth="2" />
-                    <path d="m21 21-4.3-4.3" strokeWidth="2" />
-                  </svg>
-                  <input
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    onKeyPress={handleKeyPress}
-                    placeholder="Enter your keyword, e.g., 'Artificial Intelligence'"
-                    className="w-full bg-transparent outline-none text-gray-700 placeholder:text-gray-400"
-                  />
-                </div>
-              </div>
-
-              <div className="flex items-center gap-3">
-                {/* Category Dropdown */}
-                <div className="relative" ref={dropdownRef}>
-                  <button
-                    onClick={() => setDropdownOpen(!dropdownOpen)}
-                    className="h-[46px] whitespace-nowrap inline-flex items-center gap-2 rounded-xl ring-1 ring-gray-200 px-4 text-gray-700 hover:bg-gray-50"
-                  >
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      className="h-4 w-4 text-indigo-600"
-                      viewBox="0 0 24 24"
-                      fill="currentColor"
-                    >
-                      <path d="M4 5h16v2H4zM7 11h10v2H7zM10 17h4v2h-4z" />
-                    </svg>
-                    <span className="font-medium">{category === "All" ? "All Categories" : category}</span>
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      className={`h-4 w-4 text-gray-400 transition-transform ${dropdownOpen ? "rotate-180" : ""}`}
-                      viewBox="0 0 20 20"
-                      fill="currentColor"
-                    >
-                      <path d="M5.23 7.21a.75.75 0 011.06.02L10 10.94l3.71-3.71a.75.75 0 111.06 1.06l-4.24 4.24a.75.75 0 01-1.06 0L5.21 8.29a.75.75 0 01.02-1.08z" />
-                    </svg>
-                  </button>
-
-                  {dropdownOpen && (
-                    <div className="absolute top-full mt-2 left-0 w-48 bg-white rounded-xl ring-1 ring-gray-200 shadow-lg z-50 py-1">
-                      {categories.map((cat) => (
-                        <button
-                          key={cat}
-                          onClick={() => handleCategorySelect(cat)}
-                          className={`w-full text-left px-4 py-2 hover:bg-indigo-50 transition-colors ${
-                            category === cat ? "bg-indigo-50 text-indigo-600 font-medium" : "text-gray-700"
-                          }`}
-                        >
-                          {cat === "All" ? "All Categories" : cat}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                <button
-                  onClick={handleGetData}
-                  disabled={!query.trim()}
-                  className="h-[46px] whitespace-nowrap inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-5 text-white hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    className="h-4 w-4"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                  >
-                    <path d="M12 5v14M5 12h14" strokeWidth="2" />
-                  </svg>
-                  <span className="font-semibold">Get Data</span>
-                </button>
-              </div>
-            </div>
+      {/* Search row */}
+<div className="p-6 md:p-8">
+  <div className="flex flex-col lg:flex-row gap-3">
+    <div className="flex-1">
+      <div className="rounded-xl ring-1 ring-gray-200 bg-white px-4 py-3 min-h-[54px] flex flex-wrap items-center gap-2">
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          className="h-5 w-5 text-gray-400 shrink-0"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+        >
+          <circle cx="11" cy="11" r="7" strokeWidth="2" />
+          <path d="m21 21-4.3-4.3" strokeWidth="2" />
+        </svg>
+        
+        {/* Keywords Tags Inside */}
+        {keywords.map((kw) => (
+          <div key={kw} className="inline-flex items-center gap-1 bg-indigo-100 text-indigo-700 px-2 py-1 rounded-full text-sm">
+            "{kw}"
+            <button
+              onClick={() => handleRemoveKeyword(kw)}
+              className="hover:opacity-70 ml-1"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M6 18L18 6M6 6l12 12" strokeWidth="2" stroke="currentColor" />
+              </svg>
+            </button>
           </div>
+        ))}
+        
+        <input
+          value={currentKeyword}
+          onChange={(e) => setCurrentKeyword(e.target.value)}
+          onKeyPress={handleKeyPress}
+          placeholder={keywords.length === 0 ? "Enter your keywords and press Enter" : "Add another keyword..."}
+          className="flex-1 min-w-[200px] bg-transparent outline-none text-gray-700 placeholder:text-gray-400"
+        />
+      </div>
+    </div>
+
+    <div className="flex items-start gap-3">
+      {/* Category Dropdown */}
+      <div className="relative" ref={categoryDropdownRef}>
+        <button
+          onClick={() => setCategoryDropdownOpen(!categoryDropdownOpen)}
+          className="h-[54px] whitespace-nowrap inline-flex items-center gap-2 rounded-xl ring-1 ring-gray-200 px-4 text-gray-700 hover:bg-gray-50"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            className="h-4 w-4 text-indigo-600"
+            viewBox="0 0 24 24"
+            fill="currentColor"
+          >
+            <path d="M4 5h16v2H4zM7 11h10v2H7zM10 17h4v2h-4z" />
+          </svg>
+          <span className="font-medium text-sm">{categoryDisplay}</span>
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            className={`h-4 w-4 text-gray-400 transition-transform ${categoryDropdownOpen ? "rotate-180" : ""}`}
+            viewBox="0 0 20 20"
+            fill="currentColor"
+          >
+            <path d="M5.23 7.21a.75.75 0 011.06.02L10 10.94l3.71-3.71a.75.75 0 111.06 1.06l-4.24 4.24a.75.75 0 01-1.06 0L5.21 8.29a.75.75 0 01.02-1.08z" />
+          </svg>
+        </button>
+
+        {categoryDropdownOpen && (
+          <div className="absolute top-full mt-2 left-0 w-56 bg-white rounded-xl ring-1 ring-gray-200 shadow-lg z-50 py-2 max-h-64 overflow-y-auto">
+            {categories.map((cat) => (
+              <label
+                key={cat}
+                className="flex items-center gap-2 px-4 py-2 hover:bg-gray-50 cursor-pointer transition-colors"
+              >
+                <input
+                  type="checkbox"
+                  checked={selectedCategories.includes(cat)}
+                  onChange={() => handleCategoryToggle(cat)}
+                  className="w-4 h-4 rounded"
+                />
+                <span className="text-gray-700">
+                  {cat === "All" ? "All Categories" : cat}
+                </span>
+              </label>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <button
+        onClick={handleGetData}
+        disabled={keywords.length === 0}
+        className="h-[54px] whitespace-nowrap inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-5 text-white hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          className="h-4 w-4"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+        >
+          <path d="M12 5v14M5 12h14" strokeWidth="2" />
+        </svg>
+        <span className="font-semibold">Get Data</span>
+      </button>
+    </div>
+  </div>
+</div>
 
           {hasSearched && (
             <>
@@ -291,7 +372,7 @@ export default function KeywordSearchPage() {
                   </div>
                 ) : items.length === 0 ? (
                   <div className="p-8 text-center text-gray-500">
-                    No results found for "{query}" in {category === "All" ? "all categories" : category.toLowerCase()}. Try another keyword.
+                    No results found for "{keywords.join(", ")}" in {categoryDisplay.toLowerCase()}. Try another keyword.
                   </div>
                 ) : (
                   items.map((r, idx) => (
