@@ -21,6 +21,8 @@ export default function AdminHome() {
   const [editingUser, setEditingUser] = useState<UserAccount | null>(null);
   const [formData, setFormData] = useState({ username: "", email: "", password: "" });
   const [formError, setFormError] = useState<string>("");
+  const [sidebarOpen, setSidebarOpen] = useState<boolean>(true);
+
   
   const dropdownRef = useRef<HTMLDivElement>(null);
   const profileDropdownRef = useRef<HTMLDivElement>(null);
@@ -156,57 +158,74 @@ export default function AdminHome() {
   return (
     <div className="min-h-screen bg-[#1a1d3e] flex">
       {/* Sidebar */}
-      <aside className="w-60 bg-[#1a1d3e] border-r border-gray-700/50 flex flex-col">
-        <div className="p-6 flex items-center gap-3">
-          <div className="h-10 w-10 rounded-lg bg-indigo-600 grid place-items-center">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" viewBox="0 0 24 24" fill="currentColor">
-              <circle cx="12" cy="12" r="3" />
-              <path d="M3 12h3M18 12h3M12 3v3M12 18v3" strokeWidth="2" stroke="currentColor" fill="none" />
-            </svg>
-          </div>
-          <span className="text-white text-xl font-bold">DataView</span>
-        </div>
+     {/* Sidebar */}
+<aside className={`bg-[#1a1d3e] border-r border-gray-700/50 flex flex-col transition-all duration-300 ${
+  sidebarOpen ? "w-60" : "w-20"
+}`}>
+  
+  {/* Logo/Brand Section */}
+  <div className="p-6 flex items-center gap-3">
+    <button
+      onClick={() => setSidebarOpen(!sidebarOpen)}
+      className="h-10 w-10 rounded-lg bg-indigo-600 grid place-items-center hover:bg-indigo-700 transition shrink-0"
+    >
+      <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" viewBox="0 0 24 24" fill="currentColor">
+        <circle cx="12" cy="12" r="3" />
+        <path d="M3 12h3M18 12h3M12 3v3M12 18v3" strokeWidth="2" stroke="currentColor" fill="none" />
+      </svg>
+    </button>
+    
+    {/* Brand text - hidden when collapsed */}
+    {sidebarOpen && (
+      <span className="text-white text-xl font-bold">DataView</span>
+    )}
+  </div>
 
-        <nav className="flex-1 px-3 space-y-1">
-          <button
-            onClick={() => setActiveTab("reports")}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition ${
-              activeTab === "reports" ? "bg-indigo-600 text-white" : "text-gray-400 hover:bg-gray-700/50"
-            }`}
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z" />
-            </svg>
-            <span>Dashboard</span>
-          </button>
+  {/* Navigation */}
+  <nav className="flex-1 px-3 space-y-1">
+    <button
+      onClick={() => setActiveTab("reports")}
+      className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition ${
+        activeTab === "reports" ? "bg-indigo-600 text-white" : "text-gray-400 hover:bg-gray-700/50"
+      }`}
+      title={!sidebarOpen ? "Dashboard" : ""}
+    >
+      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 shrink-0" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z" />
+      </svg>
+      {sidebarOpen && <span>Dashboard</span>}
+    </button>
 
-          <button
-            onClick={() => setActiveTab("users")}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition ${
-              activeTab === "users" ? "bg-indigo-600 text-white" : "text-gray-400 hover:bg-gray-700/50"
-            }`}
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
-            </svg>
-            <span>Users</span>
-          </button>
-        </nav>
+    <button
+      onClick={() => setActiveTab("users")}
+      className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition ${
+        activeTab === "users" ? "bg-indigo-600 text-white" : "text-gray-400 hover:bg-gray-700/50"
+      }`}
+      title={!sidebarOpen ? "Users" : ""}
+    >
+      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 shrink-0" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
+      </svg>
+      {sidebarOpen && <span>Users</span>}
+    </button>
+  </nav>
 
-        <div className="p-4 border-t border-gray-700/50">
-          <button
-            onClick={handleLogout}
-            className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-gray-400 hover:bg-gray-700/50 font-medium"
-          >
-           <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-  <polyline points="16 17 21 12 16 7" />
-  <line x1="21" y1="12" x2="9" y2="12" />
-</svg>
-            <span>Logout</span>
-          </button>
-        </div>
-      </aside>
+  {/* Logout */}
+  <div className="p-4 border-t border-gray-700/50">
+    <button
+      onClick={handleLogout}
+      className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-gray-400 hover:bg-gray-700/50 font-medium transition"
+      title={!sidebarOpen ? "Logout" : ""}
+    >
+      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+        <polyline points="16 17 21 12 16 7" />
+        <line x1="21" y1="12" x2="9" y2="12" />
+      </svg>
+      {sidebarOpen && <span>Logout</span>}
+    </button>
+  </div>
+</aside>
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col overflow-hidden">
