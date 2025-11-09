@@ -4,6 +4,7 @@ import type { Report, UserAccount } from "../types";
 import { reportAPI } from "../services/reportApi";
 import { authService } from "../services/authService";
 
+
 export default function AdminHome() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<"reports" | "users">("reports");
@@ -18,6 +19,7 @@ export default function AdminHome() {
   const [profileDropdownOpen, setProfileDropdownOpen] =
     useState<boolean>(false);
   const [viewReport, setViewReport] = useState<Report | null>(null);
+  const [pdfUrl, setPdfUrl] = React.useState<string | null>(null)
   const [showAddUserForm, setShowAddUserForm] = useState(false);
   const [editingUser, setEditingUser] = useState<UserAccount | null>(null);
   const [formData, setFormData] = useState({
@@ -27,10 +29,13 @@ export default function AdminHome() {
   });
   const [formError, setFormError] = useState<string>("");
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(true);
+  const [loading, setLoading] = useState(true);
+
 
   const dropdownRef = useRef<HTMLDivElement>(null);
   const profileDropdownRef = useRef<HTMLDivElement>(null);
 
+  // Close dropdowns when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (
@@ -51,25 +56,42 @@ export default function AdminHome() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  // ✅ FIXED: Load data on mount and when dependencies change
   useEffect(() => {
+    // console.log("🔄 Loading data for:", {
+    //   activeTab,
+    //   selectedUser,
+    //   fromDate,
+    //   toDate,
+    // });
     loadData();
-  }, [activeTab]);
+  }, [activeTab, selectedUser, fromDate, toDate]);
 
+  // ✅ FIXED: Proper loadData function
   const loadData = async () => {
-    const data = await reportAPI.getReports(selectedUser, fromDate, toDate);
-    setReports(data.reports);
-    setTotalUsers(data.totalUsers);
-    setReportsGenerated(data.reportsGenerated);
-
-    if (activeTab === "users") {
-      const allUsers = authService.getAllUsers();
-      setUsers(allUsers);
+    try {
+      if (activeTab === "reports") {
+        setLoading(true);
+      
+        const data = await reportAPI.getReports(selectedUser, fromDate, toDate);
+        setLoading(false);
+       
+        setReports(data.reports);
+        setTotalUsers(data.totalUsers);
+        setReportsGenerated(data.reportsGenerated);
+      } else if (activeTab === "users") {
+    
+        const allUsers = await authService.getAllUsers();
+       
+        setUsers(allUsers);
+      }
+    } catch (error) {
+      console.error("❌ Error loading data:", error);
     }
   };
 
   const fetchReports = async () => {
-    const data = await reportAPI.getReports(selectedUser, fromDate, toDate);
-    setReports(data.reports);
+    await loadData();
   };
 
   const handleFilter = () => {
@@ -79,17 +101,36 @@ export default function AdminHome() {
   const handleUserSelect = (user: string) => {
     setSelectedUser(user);
     setDropdownOpen(false);
-    reportAPI.getReports(user, fromDate, toDate).then((data) => {
-      setReports(data.reports);
-    });
   };
 
-  const handleViewReport = (report: Report) => {
+ 
+ const onViewReport = async (report: Report) => {
+  try {
+    if (!report.report_id) {
+      alert("Report ID is missing.");
+      return;
+    }
+    const blob = await reportAPI.fetchReportBlob(report.report_id);
+    const url = URL.createObjectURL(blob);
+    setPdfUrl(url);
     setViewReport(report);
-  };
+  } catch (error) {
+    console.error("Error fetching report PDF blob:", error);
+    alert("Failed to load report PDF.");
+  }
+};
 
-  const handleDownloadReport = (reportId: number) => {
-    reportAPI.downloadReport(reportId);
+
+
+  const handleDownloadReport = async (reportId: string) => {
+    try {
+      // console.log("📥 Admin downloading report:", reportId);
+      await reportAPI.downloadReport(reportId);
+      console.log("✅ Download successful");
+    } catch (error) {
+      console.error("❌ Download failed:", error);
+      alert("Failed to download report. Please try again.");
+    }
   };
 
   const handleLogout = () => {
@@ -105,13 +146,17 @@ export default function AdminHome() {
   };
 
   const handleEditUser = (user: UserAccount) => {
-    setFormData({ username: user.username, email: user.email, password: "" });
+    setFormData({
+      username: user.username,
+      email: user.email,
+      password: "",
+    });
     setFormError("");
     setEditingUser(user);
     setShowAddUserForm(true);
   };
 
-  const handleSubmitForm = () => {
+  const handleSubmitForm = async () => {
     setFormError("");
 
     if (
@@ -123,58 +168,101 @@ export default function AdminHome() {
       return;
     }
 
-    if (editingUser) {
-      const result = authService.updateUser(editingUser.id, {
+    try {
+      if (editingUser) {
+         const result = await authService.updateUser(editingUser.id, {
         username: formData.username,
         email: formData.email,
-        ...(formData.password && { password: formData.password }),
+        ...(formData.password && { password: formData.password }), // Only include password if provided
       });
-
-      if (!result.success) {
-        setFormError(result.message);
+        if (!result.success) {
+           setFormError(result.message || "Failed to update user");
+        return;
+        }
+      } else {
+        if (!formData.password.trim()) {
+        setFormError("Password is required for new users");
         return;
       }
-    } else {
-      const result = authService.addUser({
-        username: formData.username,
-        email: formData.email,
-        password: formData.password,
-        role: "user",
-        status: "active",
-      });
-
-      if (!result.success) {
-        setFormError(result.message);
+        const result = await authService.addUser(
+          formData.username,
+          formData.email,
+          formData.password,
+          "user"
+        );
+        if (!result.success) {
+         setFormError(result.message || "Failed to add user");
         return;
+        }
       }
-    }
 
-    loadData();
-    setShowAddUserForm(false);
-  };
-
-  const handleDeleteUser = (id: string) => {
-    if (window.confirm("Are you sure you want to delete this user?")) {
-      authService.deleteUser(id);
-      loadData();
+      await loadData();
+      setShowAddUserForm(false);
+    } catch (error) {
+      console.error("Error submitting form:", error);
+      setFormError("An error occurred");
     }
   };
 
-  const handleToggleUserStatus = (
+const handleDeleteUser = async (id: string) => {
+  if (window.confirm("Are you sure you want to delete this user?")) {
+    try {
+      const result = await authService.deleteUser(id);
+      if (!result.success) {
+        alert(result.message || "Failed to delete user");
+        return;
+      }
+      await loadData(); // Refresh list
+    } catch (err) {
+      console.error("Error deleting user:", err);
+      alert("An error occurred while deleting user");
+    }
+  }
+};
+
+
+  const handleToggleUserStatus = async (
     userId: string,
     currentStatus: "active" | "inactive"
   ) => {
-    const newStatus = currentStatus === "active" ? "inactive" : "active";
-    authService.updateUser(userId, { status: newStatus });
-    loadData();
+    try {
+      const newStatus = currentStatus === "active" ? "inactive" : "active";
+      await authService.changeUserStatus(userId, newStatus);
+      await loadData();
+    } catch (error) {
+      console.error("Error toggling status:", error);
+    }
   };
 
-  const allUsers = authService.getAllUsers().filter((u) => u.role === "user");
-  const userNames = ["All Users", ...allUsers.map((u) => u.username)];
+  // ✅ FIXED: Get user names for dropdown
+  const [userNames, setUserNames] = useState<string[]>(["All Users"]);
+
+  useEffect(() => {
+    const loadUserNames = async () => {
+      const allUsers = await authService.getAllUsers();
+      const filteredUsers = allUsers.filter((u) => u.role === "user");
+      setUserNames(["All Users", ...filteredUsers.map((u) => u.email)]);
+    };
+
+    loadUserNames();
+  }, [activeTab]);
+
+  
 
   return (
+    
     <div className="min-h-screen bg-[#1a1d3e] flex flex-col md:flex-row">
       {/* Mobile Header */}
+      {loading && (
+  <div className="fixed inset-0 z-50 flex flex-col justify-center items-center bg-black bg-opacity-50 backdrop-blur-sm">
+    <svg className="animate-spin h-12 w-12 text-indigo-400 mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path>
+    </svg>
+    <span className="text-lg text-white font-medium">Loading details...</span>
+  </div>
+)}
+
       <div className="md:hidden flex items-center justify-between bg-[#242850] px-4 py-3 border-b border-gray-700/50">
         <button
           onClick={() => setSidebarOpen(!sidebarOpen)}
@@ -469,13 +557,21 @@ export default function AdminHome() {
 
                 {(fromDate || toDate || selectedUser !== "All Users") && (
                   <button
-                    onClick={() => {
+                    onClick={async () => {
                       setFromDate("");
                       setToDate("");
                       setSelectedUser("All Users");
-                      reportAPI.getReports("All Users").then((data) => {
+
+                      try {
+                        const data = await reportAPI.getReports("All Users");
                         setReports(data.reports);
-                      });
+                      } catch (error) {
+                        console.error(
+                          "Error fetching all users' reports:",
+                          error
+                        );
+                        alert("Failed to load reports. Please try again.");
+                      }
                     }}
                     className="text-gray-400 hover:text-white text-xs md:text-sm underline"
                   >
@@ -611,7 +707,7 @@ export default function AdminHome() {
                             <td className="px-3 sm:px-6 py-2 sm:py-4 whitespace-nowrap text-xs sm:text-sm">
                               <div className="flex items-center gap-2 sm:gap-3">
                                 <button
-                                  onClick={() => handleViewReport(report)}
+                                  onClick={() => onViewReport(report)}
                                   className="text-indigo-400 hover:text-indigo-300 p-1"
                                   title="View Report"
                                 >
@@ -626,7 +722,9 @@ export default function AdminHome() {
                                 </button>
                                 <button
                                   onClick={() =>
-                                    handleDownloadReport(report.id)
+                                    handleDownloadReport(
+                                      report.report_id || String(report.id)
+                                    )
                                   }
                                   className="text-emerald-400 hover:text-emerald-300 p-1"
                                   title="Download Report"
@@ -868,99 +966,36 @@ export default function AdminHome() {
       </main>
 
       {/* View Report Modal */}
-      {viewReport && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-[#242850] rounded-xl sm:rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-4 sm:p-6 border-b border-gray-700/50 flex items-center justify-between">
-              <h3 className="text-lg sm:text-xl font-bold text-white">
-                Report Details
-              </h3>
-              <button
-                onClick={() => setViewReport(null)}
-                className="text-gray-400 hover:text-white p-1"
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  className="h-5 w-5 sm:h-6 sm:w-6"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M6 18L18 6M6 6l12 12"
-                  />
-                </svg>
-              </button>
-            </div>
+  {viewReport && pdfUrl && (
+  <div
+    className="fixed inset-0 flex justify-center items-center z-50 bg-black bg-opacity-50 backdrop-blur-sm"
+    role="dialog"
+    aria-modal="true"
+  >
+    <div className="bg-[#2d2b3e] rounded-lg w-[90vw] max-w-4xl max-h-[90vh] overflow-auto relative shadow-lg">
+      {/* Close Button */}
+      <button
+        onClick={() => {
+          setViewReport(null);
+          setPdfUrl(null);
+        }}
+        className="absolute top-3 right-3 text-white text-xl hover:text-red-400"
+        aria-label="Close report modal"
+      >
+        &times;
+      </button>
 
-            <div className="p-4 sm:p-6 space-y-3 sm:space-y-4">
-              <div>
-                <p className="text-xs sm:text-sm text-gray-400">Date</p>
-                <p className="text-sm sm:text-base text-white font-medium">
-                  {viewReport.date}
-                </p>
-              </div>
+      {/* PDF Viewer */}
+      <iframe
+        src={pdfUrl}
+        title="Report PDF Viewer"
+        className="w-full h-[80vh] rounded-b-lg"
+        frameBorder="0"
+      />
+    </div>
+  </div>
+)}
 
-              <div>
-                <p className="text-xs sm:text-sm text-gray-400">User</p>
-                <p className="text-sm sm:text-base text-white font-medium">
-                  {viewReport.user}
-                </p>
-              </div>
-
-              <div>
-                <p className="text-xs sm:text-sm text-gray-400 mb-2">
-                  Keywords
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {viewReport.keywords.map((kw, i) => (
-                    <span
-                      key={i}
-                      className="px-2 sm:px-3 py-1 bg-indigo-600/20 text-indigo-400 rounded-full text-xs sm:text-sm"
-                    >
-                      {kw}
-                    </span>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <p className="text-xs sm:text-sm text-gray-400 mb-2">
-                  Categories
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {viewReport.categories?.map((cat, i) => (
-                    <span
-                      key={i}
-                      className="px-2 sm:px-3 py-1 bg-emerald-600/20 text-emerald-400 rounded-full text-xs sm:text-sm"
-                    >
-                      {cat}
-                    </span>
-                  )) || <p className="text-gray-400 text-xs sm:text-sm">N/A</p>}
-                </div>
-              </div>
-
-              <div className="pt-3 sm:pt-4 border-t border-gray-700/50">
-                <p className="text-xs sm:text-sm text-gray-400 mb-2">
-                  Report Content
-                </p>
-                <div className="bg-[#1a1d3e] rounded-lg p-3 sm:p-4 text-gray-300 text-xs sm:text-sm">
-                  <p className="mb-2">
-                    This is a placeholder for the actual report content.
-                  </p>
-                  <p>TODO: Fetch full report data from backend API:</p>
-                  <code className="block mt-2 text-xs text-indigo-400 break-all">
-                    GET /api/reports/{viewReport.id}
-                  </code>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

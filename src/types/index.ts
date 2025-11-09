@@ -6,8 +6,9 @@ export interface SearchResult {
   id: number;
   title: string;
   desc: string;
-  cta: string;
+  // cta?: string;
   category: Category;
+  link?: string; // Add this line - some results have external links
 }
 
 export interface Report {
@@ -16,6 +17,8 @@ export interface Report {
   keywords: string[];
   user: string;
   categories?: Category[];
+  report_link?: string; // Add this line - for PDF download links
+  report_id?: string;
 }
 
 export interface UserAccount {

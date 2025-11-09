@@ -1,24 +1,20 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { authService } from "../services/authService";
 
 export default function AuthPage() {
-  const [username, setUsername] = useState<string>("");
+  const [email, setEmail] = useState<string>("");
   const [password, setPassword] = useState<string>("");
   const [error, setError] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(false);
   const navigate = useNavigate();
-
-  useEffect(() => {
-    authService.initializeUsers();
-  }, []);
 
   const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError("");
     setLoading(true);
 
-    const result = await authService.login(username, password);
+    const result = await authService.login(email, password);
 
     if (result.success && result.user) {
       if (result.user.role === "admin") {
@@ -93,16 +89,16 @@ export default function AuthPage() {
                 {/* Form */}
                 <form onSubmit={handleLogin} className="space-y-3 sm:space-y-4">
                   
-                  {/* Username field */}
+                  {/* Email field */}
                   <div>
                     <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1 sm:mb-2">
-                      Username
+                      Email
                     </label>
                     <input
-                      type="text"
-                      placeholder="Enter username"
-                      value={username}
-                      onChange={(e) => setUsername(e.target.value)}
+                      type="email"
+                      placeholder="Enter your email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
                       required
                       className="w-full px-3 sm:px-4 py-2.5 sm:py-3 bg-gray-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
                     />
@@ -133,22 +129,22 @@ export default function AuthPage() {
                   </button>
                 </form>
 
-                {/* Demo credentials - responsive */}
-                <div className="mt-4 sm:mt-6 p-3 sm:p-4 bg-blue-50 rounded-lg text-xs sm:text-sm text-gray-600">
+                {/* Demo credentials - OPTIONAL: Uncomment when you have credentials */}
+                {/* <div className="mt-4 sm:mt-6 p-3 sm:p-4 bg-blue-50 rounded-lg text-xs sm:text-sm text-gray-600">
                   <p className="font-semibold mb-2">Demo Credentials:</p>
                   <div className="space-y-1">
                     <p>
                       <span className="text-gray-700">Admin:</span>{" "}
-                      <code className="bg-white px-2 py-1 rounded text-xs">admin</code> /{" "}
+                      <code className="bg-white px-2 py-1 rounded text-xs">admin@example.com</code> /{" "}
                       <code className="bg-white px-2 py-1 rounded text-xs">Admin@123</code>
                     </p>
                     <p>
                       <span className="text-gray-700">User:</span>{" "}
-                      <code className="bg-white px-2 py-1 rounded text-xs">user</code> /{" "}
+                      <code className="bg-white px-2 py-1 rounded text-xs">user@example.com</code> /{" "}
                       <code className="bg-white px-2 py-1 rounded text-xs">User@123</code>
                     </p>
                   </div>
-                </div>
+                </div> */}
               </div>
             </div>
           </div>
