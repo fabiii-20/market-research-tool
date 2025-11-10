@@ -29,12 +29,6 @@ export default function AdminHome() {
   const [formError, setFormError] = useState<string>("");
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(true);
   const [loading, setLoading] = useState(true);
-  const [visiblePasswords, setVisiblePasswords] = useState<Set<string>>(
-    new Set()
-  );
-  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
-  const [newPassword, setNewPassword] = useState("");
-  const [currentPassword, setCurrentPassword] = useState("");
 
   const dropdownRef = useRef<HTMLDivElement>(null);
   const profileDropdownRef = useRef<HTMLDivElement>(null);
@@ -62,12 +56,6 @@ export default function AdminHome() {
 
   // ✅ FIXED: Load data on mount and when dependencies change
   useEffect(() => {
-    // console.log("🔄 Loading data for:", {
-    //   activeTab,
-    //   selectedUser,
-    //   fromDate,
-    //   toDate,
-    // });
     loadData();
   }, [activeTab, selectedUser, fromDate, toDate]);
 
@@ -149,63 +137,80 @@ export default function AdminHome() {
     setFormData({
       username: user.username,
       email: user.email,
-      password: "", // This will be for new password
+      password: "",
     });
-    setCurrentPassword(user.password || "••••••••"); // Store current password
-    setNewPassword(""); // Reset new password field
-    setShowCurrentPassword(false); // Reset visibility
     setFormError("");
     setEditingUser(user);
     setShowAddUserForm(true);
   };
 
-  const handleSubmitForm = async () => {
-    setFormError("");
+ const handleSubmitForm = async () => {
+  setFormError("");
+  
+  if (!formData.username.trim() || !formData.email.trim()) {
+    setFormError("Username and email are required");
+    return;
+  }
 
-    if (
-      !formData.username.trim() ||
-      !formData.email.trim() ||
-      !formData.password.trim()
-    ) {
-      setFormError("All fields are required");
-      return;
-    }
-
-    try {
-      if (editingUser) {
-        const result = await authService.updateUser(editingUser.id, {
-          username: formData.username,
-          email: formData.email,
-          ...(formData.password && { password: formData.password }), // Only include password if provided
-        });
-        if (!result.success) {
-          setFormError(result.message || "Failed to update user");
+  try {
+    if (editingUser) {
+      // Update existing user
+      const updateData: { email?: string; password?: string } = {
+        email: formData.email,
+      };
+      
+      // Only include password if user entered a new one
+      if (formData.password.trim()) {
+        if (formData.password.length < 8) {
+          setFormError("Password must be at least 8 characters");
           return;
         }
-      } else {
-        if (!formData.password.trim()) {
-          setFormError("Password is required for new users");
-          return;
-        }
-        const result = await authService.addUser(
-          formData.username,
-          formData.email,
-          formData.password,
-          "user"
-        );
-        if (!result.success) {
-          setFormError(result.message || "Failed to add user");
-          return;
-        }
+        updateData.password = formData.password;
       }
-
-      await loadData();
-      setShowAddUserForm(false);
-    } catch (error) {
-      console.error("Error submitting form:", error);
-      setFormError("An error occurred");
+      
+      const result = await authService.updateUser(editingUser.id, updateData);
+      
+      if (!result.success) {
+        setFormError(result.message || "Failed to update user");
+        return;
+      }
+      
+      alert("User updated successfully!");
+    } else {
+      // Add new user
+      if (!formData.password.trim()) {
+        setFormError("Password is required for new users");
+        return;
+      }
+      
+      if (formData.password.length < 8) {
+        setFormError("Password must be at least 8 characters");
+        return;
+      }
+      
+      const result = await authService.addUser(
+        formData.username,
+        formData.email,
+        formData.password,
+        "user"
+      );
+      
+      if (!result.success) {
+        setFormError(result.message || "Failed to add user");
+        return;
+      }
+      
+      alert("User added successfully!");
     }
-  };
+
+    await loadData();
+    setShowAddUserForm(false);
+  } catch (error) {
+    console.error("Error submitting form:", error);
+    setFormError("An error occurred");
+  }
+};
+
 
   const handleToggleUserStatus = async (
     userId: string,
@@ -217,28 +222,6 @@ export default function AdminHome() {
       await loadData();
     } catch (error) {
       console.error("Error toggling status:", error);
-    }
-  };
-
-  const togglePasswordVisibility = (userId: string) => {
-    setVisiblePasswords((prev) => {
-      const newSet = new Set(prev);
-      if (newSet.has(userId)) {
-        newSet.delete(userId);
-      } else {
-        newSet.add(userId);
-      }
-      return newSet;
-    });
-  };
-
-  const copyPassword = async (password: string) => {
-    try {
-      await navigator.clipboard.writeText(password);
-      alert("Password copied to clipboard!");
-    } catch (err) {
-      console.error("Failed to copy password:", err);
-      alert("Failed to copy password");
     }
   };
 
@@ -806,9 +789,6 @@ export default function AdminHome() {
                       <th className="px-3 sm:px-6 py-2 sm:py-4 text-left text-xs font-medium text-gray-400 uppercase">
                         STATUS
                       </th>
-                      <th className="px-3 sm:px-6 py-2 sm:py-4 text-left text-xs font-medium text-gray-400 uppercase">
-                        PASSWORD
-                      </th>
                       <th className="hidden sm:table-cell px-3 sm:px-6 py-2 sm:py-4 text-left text-xs font-medium text-gray-400 uppercase">
                         REPORTS
                       </th>
@@ -843,82 +823,7 @@ export default function AdminHome() {
                             {user.status}
                           </button>
                         </td>
-                        {/* PASSWORD COLUMN */}
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                          <div className="flex items-center gap-2">
-                            <span className="font-mono">
-                              {visiblePasswords.has(user.id)
-                                ? user.password
-                                : "••••••••"}
-                            </span>
-                            <button
-                              onClick={() => togglePasswordVisibility(user.id)}
-                              className="text-gray-400 hover:text-indigo-400 p-1"
-                              title={
-                                visiblePasswords.has(user.id)
-                                  ? "Hide password"
-                                  : "Show password"
-                              }
-                            >
-                              {visiblePasswords.has(user.id) ? (
-                                <svg
-                                  xmlns="http://www.w3.org/2000/svg"
-                                  className="h-4 w-4"
-                                  fill="none"
-                                  viewBox="0 0 24 24"
-                                  stroke="currentColor"
-                                  strokeWidth={2}
-                                >
-                                  <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"
-                                  />
-                                </svg>
-                              ) : (
-                                <svg
-                                  xmlns="http://www.w3.org/2000/svg"
-                                  className="h-4 w-4"
-                                  fill="none"
-                                  viewBox="0 0 24 24"
-                                  stroke="currentColor"
-                                  strokeWidth={2}
-                                >
-                                  <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-                                  />
-                                  <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
-                                  />
-                                </svg>
-                              )}
-                            </button>
-                            <button
-                              onClick={() => copyPassword(user.password)}
-                              className="text-gray-400 hover:text-indigo-400 p-1"
-                              title="Copy password"
-                            >
-                              <svg
-                                xmlns="http://www.w3.org/2000/svg"
-                                className="h-4 w-4"
-                                fill="none"
-                                viewBox="0 0 24 24"
-                                stroke="currentColor"
-                                strokeWidth={2}
-                              >
-                                <path
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
-                                />
-                              </svg>
-                            </button>
-                          </div>
-                        </td>
+
                         <td className="hidden sm:table-cell px-3 sm:px-6 py-2 sm:py-4 whitespace-nowrap text-xs sm:text-sm text-white">
                           {user.reportsCount}
                         </td>
@@ -1006,90 +911,16 @@ export default function AdminHome() {
                       />
                     </div>
 
-                    {/* Current Password Field (Read-only with Eye Icon) */}
-                    {editingUser && (
-                      <div>
-                        <label className="block text-xs sm:text-sm font-medium text-gray-300 mb-1 sm:mb-2">
-                          Current Password
-                        </label>
-                        <div className="relative">
-                          <input
-                            type={showCurrentPassword ? "text" : "password"}
-                            value={currentPassword}
-                            readOnly
-                            className="w-full px-3 sm:px-4 py-2 pr-10 bg-[#1a1d3e] border border-gray-700 rounded-lg text-white opacity-60 cursor-not-allowed text-sm"
-                          />
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setShowCurrentPassword(!showCurrentPassword)
-                            }
-                            className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-indigo-400 p-1.5"
-                            title={
-                              showCurrentPassword
-                                ? "Hide password"
-                                : "Show password"
-                            }
-                          >
-                            {showCurrentPassword ? (
-                              <svg
-                                xmlns="http://www.w3.org/2000/svg"
-                                className="h-5 w-5"
-                                fill="none"
-                                viewBox="0 0 24 24"
-                                stroke="currentColor"
-                                strokeWidth={2}
-                              >
-                                <path
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"
-                                />
-                              </svg>
-                            ) : (
-                              <svg
-                                xmlns="http://www.w3.org/2000/svg"
-                                className="h-5 w-5"
-                                fill="none"
-                                viewBox="0 0 24 24"
-                                stroke="currentColor"
-                                strokeWidth={2}
-                              >
-                                <path
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-                                />
-                                <path
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
-                                />
-                              </svg>
-                            )}
-                          </button>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* New Password Field (Optional) */}
                     <div>
                       <label className="block text-xs sm:text-sm font-medium text-gray-300 mb-1 sm:mb-2">
-                        {editingUser ? "New Password (optional)" : "Password"}
+                        {editingUser ? " Password (Enter only if you want to update) " : "Password"}
                       </label>
                       <input
                         type="password"
-                        value={editingUser ? newPassword : formData.password}
-                        onChange={(e) => {
-                          if (editingUser) {
-                            setNewPassword(e.target.value);
-                          } else {
-                            setFormData({
-                              ...formData,
-                              password: e.target.value,
-                            });
-                          }
-                        }}
+                        value={formData.password}
+                        onChange={(e) =>
+                          setFormData({ ...formData, password: e.target.value })
+                        }
                         placeholder={
                           editingUser
                             ? "Leave blank to keep current password"
@@ -1099,7 +930,7 @@ export default function AdminHome() {
                       />
                       {editingUser ? (
                         <p className="text-xs text-gray-400 mt-1">
-                          Only enter a new password if you want to change it
+                          Only enter a password if you want to change it
                         </p>
                       ) : (
                         <p className="text-xs text-gray-400 mt-1">

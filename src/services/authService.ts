@@ -155,22 +155,14 @@ export const authService = {
     }
   },
 
-async deleteUser(userId: string): Promise<{ success: boolean; message?: string }> {
-  try {
-    await apiRequest(`/api/admin/users/${userId}`, {
-      method: 'DELETE',
-    });
-    return { success: true };
-  } catch (err) {
-    console.error('Error deleting user:', err);
-    return { success: false, message: 'Failed to delete user' };
-  }
-},
 
-async updateUser(userId: string, data: { username?: string; email?: string; password?: string }): Promise<{ success: boolean; message?: string }> {
+async updateUser(
+  userId: string,
+  data: { email?: string; password?: string }
+): Promise<{ success: boolean; message?: string }> {
   try {
-    await apiRequest(`/api/admin/users/${userId}`, {
-      method: 'PUT',
+    await apiRequest(`/api/admin/update-user/${userId}`, {
+      method: 'PATCH',
       body: JSON.stringify(data),
     });
     return { success: true };
@@ -178,7 +170,8 @@ async updateUser(userId: string, data: { username?: string; email?: string; pass
     console.error('Error updating user:', err);
     return { success: false, message: 'Failed to update user' };
   }
-},
+}
+
 
 
 };
