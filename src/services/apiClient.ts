@@ -1,5 +1,5 @@
 // Base API configuration and utilities
-const API_BASE_URL = import.meta.env.DEV ? "" : "http://62.171.152.195:8003";
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
 
 // Get JWT token from localStorage
 const getAuthToken = (): string | null => {
@@ -52,4 +52,3 @@ export async function apiRequest<T>(
   }
 }
 
-export { API_BASE_URL };
