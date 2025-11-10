@@ -4,7 +4,6 @@ import type { Report, UserAccount } from "../types";
 import { reportAPI } from "../services/reportApi";
 import { authService } from "../services/authService";
 
-
 export default function AdminHome() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<"reports" | "users">("reports");
@@ -19,7 +18,7 @@ export default function AdminHome() {
   const [profileDropdownOpen, setProfileDropdownOpen] =
     useState<boolean>(false);
   const [viewReport, setViewReport] = useState<Report | null>(null);
-  const [pdfUrl, setPdfUrl] = React.useState<string | null>(null)
+  const [pdfUrl, setPdfUrl] = React.useState<string | null>(null);
   const [showAddUserForm, setShowAddUserForm] = useState(false);
   const [editingUser, setEditingUser] = useState<UserAccount | null>(null);
   const [formData, setFormData] = useState({
@@ -30,7 +29,12 @@ export default function AdminHome() {
   const [formError, setFormError] = useState<string>("");
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(true);
   const [loading, setLoading] = useState(true);
-
+  const [visiblePasswords, setVisiblePasswords] = useState<Set<string>>(
+    new Set()
+  );
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [newPassword, setNewPassword] = useState("");
+  const [currentPassword, setCurrentPassword] = useState("");
 
   const dropdownRef = useRef<HTMLDivElement>(null);
   const profileDropdownRef = useRef<HTMLDivElement>(null);
@@ -72,17 +76,16 @@ export default function AdminHome() {
     try {
       if (activeTab === "reports") {
         setLoading(true);
-      
+
         const data = await reportAPI.getReports(selectedUser, fromDate, toDate);
         setLoading(false);
-       
+
         setReports(data.reports);
         setTotalUsers(data.totalUsers);
         setReportsGenerated(data.reportsGenerated);
       } else if (activeTab === "users") {
-    
         const allUsers = await authService.getAllUsers();
-       
+
         setUsers(allUsers);
       }
     } catch (error) {
@@ -103,24 +106,21 @@ export default function AdminHome() {
     setDropdownOpen(false);
   };
 
- 
- const onViewReport = async (report: Report) => {
-  try {
-    if (!report.report_id) {
-      alert("Report ID is missing.");
-      return;
+  const onViewReport = async (report: Report) => {
+    try {
+      if (!report.report_id) {
+        alert("Report ID is missing.");
+        return;
+      }
+      const blob = await reportAPI.fetchReportBlob(report.report_id);
+      const url = URL.createObjectURL(blob);
+      setPdfUrl(url);
+      setViewReport(report);
+    } catch (error) {
+      console.error("Error fetching report PDF blob:", error);
+      alert("Failed to load report PDF.");
     }
-    const blob = await reportAPI.fetchReportBlob(report.report_id);
-    const url = URL.createObjectURL(blob);
-    setPdfUrl(url);
-    setViewReport(report);
-  } catch (error) {
-    console.error("Error fetching report PDF blob:", error);
-    alert("Failed to load report PDF.");
-  }
-};
-
-
+  };
 
   const handleDownloadReport = async (reportId: string) => {
     try {
@@ -149,8 +149,11 @@ export default function AdminHome() {
     setFormData({
       username: user.username,
       email: user.email,
-      password: "",
+      password: "", // This will be for new password
     });
+    setCurrentPassword(user.password || "••••••••"); // Store current password
+    setNewPassword(""); // Reset new password field
+    setShowCurrentPassword(false); // Reset visibility
     setFormError("");
     setEditingUser(user);
     setShowAddUserForm(true);
@@ -170,20 +173,20 @@ export default function AdminHome() {
 
     try {
       if (editingUser) {
-         const result = await authService.updateUser(editingUser.id, {
-        username: formData.username,
-        email: formData.email,
-        ...(formData.password && { password: formData.password }), // Only include password if provided
-      });
+        const result = await authService.updateUser(editingUser.id, {
+          username: formData.username,
+          email: formData.email,
+          ...(formData.password && { password: formData.password }), // Only include password if provided
+        });
         if (!result.success) {
-           setFormError(result.message || "Failed to update user");
-        return;
+          setFormError(result.message || "Failed to update user");
+          return;
         }
       } else {
         if (!formData.password.trim()) {
-        setFormError("Password is required for new users");
-        return;
-      }
+          setFormError("Password is required for new users");
+          return;
+        }
         const result = await authService.addUser(
           formData.username,
           formData.email,
@@ -191,8 +194,8 @@ export default function AdminHome() {
           "user"
         );
         if (!result.success) {
-         setFormError(result.message || "Failed to add user");
-        return;
+          setFormError(result.message || "Failed to add user");
+          return;
         }
       }
 
@@ -204,23 +207,6 @@ export default function AdminHome() {
     }
   };
 
-const handleDeleteUser = async (id: string) => {
-  if (window.confirm("Are you sure you want to delete this user?")) {
-    try {
-      const result = await authService.deleteUser(id);
-      if (!result.success) {
-        alert(result.message || "Failed to delete user");
-        return;
-      }
-      await loadData(); // Refresh list
-    } catch (err) {
-      console.error("Error deleting user:", err);
-      alert("An error occurred while deleting user");
-    }
-  }
-};
-
-
   const handleToggleUserStatus = async (
     userId: string,
     currentStatus: "active" | "inactive"
@@ -231,6 +217,28 @@ const handleDeleteUser = async (id: string) => {
       await loadData();
     } catch (error) {
       console.error("Error toggling status:", error);
+    }
+  };
+
+  const togglePasswordVisibility = (userId: string) => {
+    setVisiblePasswords((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(userId)) {
+        newSet.delete(userId);
+      } else {
+        newSet.add(userId);
+      }
+      return newSet;
+    });
+  };
+
+  const copyPassword = async (password: string) => {
+    try {
+      await navigator.clipboard.writeText(password);
+      alert("Password copied to clipboard!");
+    } catch (err) {
+      console.error("Failed to copy password:", err);
+      alert("Failed to copy password");
     }
   };
 
@@ -247,21 +255,36 @@ const handleDeleteUser = async (id: string) => {
     loadUserNames();
   }, [activeTab]);
 
-  
-
   return (
-    
     <div className="min-h-screen bg-[#1a1d3e] flex flex-col md:flex-row">
       {/* Mobile Header */}
       {loading && (
-  <div className="fixed inset-0 z-50 flex flex-col justify-center items-center bg-black bg-opacity-50 backdrop-blur-sm">
-    <svg className="animate-spin h-12 w-12 text-indigo-400 mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path>
-    </svg>
-    <span className="text-lg text-white font-medium">Loading details...</span>
-  </div>
-)}
+        <div className="fixed inset-0 z-50 flex flex-col justify-center items-center bg-black bg-opacity-50 backdrop-blur-sm">
+          <svg
+            className="animate-spin h-12 w-12 text-indigo-400 mb-4"
+            xmlns="http://www.w3.org/2000/svg"
+            fill="none"
+            viewBox="0 0 24 24"
+          >
+            <circle
+              className="opacity-25"
+              cx="12"
+              cy="12"
+              r="10"
+              stroke="currentColor"
+              strokeWidth="4"
+            ></circle>
+            <path
+              className="opacity-75"
+              fill="currentColor"
+              d="M4 12a8 8 0 018-8v8z"
+            ></path>
+          </svg>
+          <span className="text-lg text-white font-medium">
+            Loading details...
+          </span>
+        </div>
+      )}
 
       <div className="md:hidden flex items-center justify-between bg-[#242850] px-4 py-3 border-b border-gray-700/50">
         <button
@@ -783,6 +806,9 @@ const handleDeleteUser = async (id: string) => {
                       <th className="px-3 sm:px-6 py-2 sm:py-4 text-left text-xs font-medium text-gray-400 uppercase">
                         STATUS
                       </th>
+                      <th className="px-3 sm:px-6 py-2 sm:py-4 text-left text-xs font-medium text-gray-400 uppercase">
+                        PASSWORD
+                      </th>
                       <th className="hidden sm:table-cell px-3 sm:px-6 py-2 sm:py-4 text-left text-xs font-medium text-gray-400 uppercase">
                         REPORTS
                       </th>
@@ -817,6 +843,82 @@ const handleDeleteUser = async (id: string) => {
                             {user.status}
                           </button>
                         </td>
+                        {/* PASSWORD COLUMN */}
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono">
+                              {visiblePasswords.has(user.id)
+                                ? user.password
+                                : "••••••••"}
+                            </span>
+                            <button
+                              onClick={() => togglePasswordVisibility(user.id)}
+                              className="text-gray-400 hover:text-indigo-400 p-1"
+                              title={
+                                visiblePasswords.has(user.id)
+                                  ? "Hide password"
+                                  : "Show password"
+                              }
+                            >
+                              {visiblePasswords.has(user.id) ? (
+                                <svg
+                                  xmlns="http://www.w3.org/2000/svg"
+                                  className="h-4 w-4"
+                                  fill="none"
+                                  viewBox="0 0 24 24"
+                                  stroke="currentColor"
+                                  strokeWidth={2}
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"
+                                  />
+                                </svg>
+                              ) : (
+                                <svg
+                                  xmlns="http://www.w3.org/2000/svg"
+                                  className="h-4 w-4"
+                                  fill="none"
+                                  viewBox="0 0 24 24"
+                                  stroke="currentColor"
+                                  strokeWidth={2}
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                                  />
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
+                                  />
+                                </svg>
+                              )}
+                            </button>
+                            <button
+                              onClick={() => copyPassword(user.password)}
+                              className="text-gray-400 hover:text-indigo-400 p-1"
+                              title="Copy password"
+                            >
+                              <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                className="h-4 w-4"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                                strokeWidth={2}
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                                />
+                              </svg>
+                            </button>
+                          </div>
+                        </td>
                         <td className="hidden sm:table-cell px-3 sm:px-6 py-2 sm:py-4 whitespace-nowrap text-xs sm:text-sm text-white">
                           {user.reportsCount}
                         </td>
@@ -840,29 +942,6 @@ const handleDeleteUser = async (id: string) => {
                               >
                                 <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
                                 <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                              </svg>
-                            </button>
-
-                            {/* Delete Button */}
-                            <button
-                              onClick={() => handleDeleteUser(user.id)}
-                              className="text-red-400 hover:text-red-300 p-1.5 hover:bg-red-500/10 rounded-lg transition"
-                              title="Delete User"
-                            >
-                              <svg
-                                xmlns="http://www.w3.org/2000/svg"
-                                className="h-4 w-4 sm:h-5 sm:w-5"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="2"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                              >
-                                <polyline points="3 6 5 6 21 6" />
-                                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                                <line x1="10" y1="11" x2="10" y2="17" />
-                                <line x1="14" y1="11" x2="14" y2="17" />
                               </svg>
                             </button>
                           </div>
@@ -896,12 +975,20 @@ const handleDeleteUser = async (id: string) => {
                       <input
                         type="text"
                         value={formData.username}
+                        disabled={!!editingUser}
                         onChange={(e) =>
                           setFormData({ ...formData, username: e.target.value })
                         }
                         placeholder="Enter username"
-                        className="w-full px-3 sm:px-4 py-2 bg-[#1a1d3e] border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                        className={`w-full px-3 sm:px-4 py-2 bg-[#1a1d3e] border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm ${
+                          editingUser ? "opacity-60 cursor-not-allowed" : ""
+                        }`}
                       />
+                      {editingUser && (
+                        <p className="text-xs text-gray-500 mt-1">
+                          Username cannot be changed
+                        </p>
+                      )}
                     </div>
 
                     <div>
@@ -919,28 +1006,107 @@ const handleDeleteUser = async (id: string) => {
                       />
                     </div>
 
+                    {/* Current Password Field (Read-only with Eye Icon) */}
+                    {editingUser && (
+                      <div>
+                        <label className="block text-xs sm:text-sm font-medium text-gray-300 mb-1 sm:mb-2">
+                          Current Password
+                        </label>
+                        <div className="relative">
+                          <input
+                            type={showCurrentPassword ? "text" : "password"}
+                            value={currentPassword}
+                            readOnly
+                            className="w-full px-3 sm:px-4 py-2 pr-10 bg-[#1a1d3e] border border-gray-700 rounded-lg text-white opacity-60 cursor-not-allowed text-sm"
+                          />
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setShowCurrentPassword(!showCurrentPassword)
+                            }
+                            className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-indigo-400 p-1.5"
+                            title={
+                              showCurrentPassword
+                                ? "Hide password"
+                                : "Show password"
+                            }
+                          >
+                            {showCurrentPassword ? (
+                              <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                className="h-5 w-5"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                                strokeWidth={2}
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"
+                                />
+                              </svg>
+                            ) : (
+                              <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                className="h-5 w-5"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                                strokeWidth={2}
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                                />
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
+                                />
+                              </svg>
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* New Password Field (Optional) */}
                     <div>
                       <label className="block text-xs sm:text-sm font-medium text-gray-300 mb-1 sm:mb-2">
-                        Password{" "}
-                        {editingUser && (
-                          <span className="text-gray-500">
-                            (leave blank to keep current)
-                          </span>
-                        )}
+                        {editingUser ? "New Password (optional)" : "Password"}
                       </label>
                       <input
                         type="password"
-                        value={formData.password}
-                        onChange={(e) =>
-                          setFormData({ ...formData, password: e.target.value })
+                        value={editingUser ? newPassword : formData.password}
+                        onChange={(e) => {
+                          if (editingUser) {
+                            setNewPassword(e.target.value);
+                          } else {
+                            setFormData({
+                              ...formData,
+                              password: e.target.value,
+                            });
+                          }
+                        }}
+                        placeholder={
+                          editingUser
+                            ? "Leave blank to keep current password"
+                            : "Enter password"
                         }
-                        placeholder="Enter password"
                         className="w-full px-3 sm:px-4 py-2 bg-[#1a1d3e] border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
                       />
-                      <p className="text-xs text-gray-400 mt-1">
-                        Must be 8+ characters with letters, numbers, and special
-                        characters (@, #, $, etc.)
-                      </p>
+                      {editingUser ? (
+                        <p className="text-xs text-gray-400 mt-1">
+                          Only enter a new password if you want to change it
+                        </p>
+                      ) : (
+                        <p className="text-xs text-gray-400 mt-1">
+                          Must be 8+ characters with letters, numbers, and
+                          special characters (@, #, $, etc.)
+                        </p>
+                      )}
                     </div>
 
                     <div className="flex gap-2 sm:gap-3 pt-3 sm:pt-4">
@@ -966,36 +1132,35 @@ const handleDeleteUser = async (id: string) => {
       </main>
 
       {/* View Report Modal */}
-  {viewReport && pdfUrl && (
-  <div
-    className="fixed inset-0 flex justify-center items-center z-50 bg-black bg-opacity-50 backdrop-blur-sm"
-    role="dialog"
-    aria-modal="true"
-  >
-    <div className="bg-[#2d2b3e] rounded-lg w-[90vw] max-w-4xl max-h-[90vh] overflow-auto relative shadow-lg">
-      {/* Close Button */}
-      <button
-        onClick={() => {
-          setViewReport(null);
-          setPdfUrl(null);
-        }}
-        className="absolute top-3 right-3 text-white text-xl hover:text-red-400"
-        aria-label="Close report modal"
-      >
-        &times;
-      </button>
+      {viewReport && pdfUrl && (
+        <div
+          className="fixed inset-0 flex justify-center items-center z-50 bg-black bg-opacity-50 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="bg-[#2d2b3e] rounded-lg w-[90vw] max-w-4xl max-h-[90vh] overflow-auto relative shadow-lg">
+            {/* Close Button */}
+            <button
+              onClick={() => {
+                setViewReport(null);
+                setPdfUrl(null);
+              }}
+              className="absolute top-3 right-3 text-white text-xl hover:text-red-400"
+              aria-label="Close report modal"
+            >
+              &times;
+            </button>
 
-      {/* PDF Viewer */}
-      <iframe
-        src={pdfUrl}
-        title="Report PDF Viewer"
-        className="w-full h-[80vh] rounded-b-lg"
-        frameBorder="0"
-      />
-    </div>
-  </div>
-)}
-
+            {/* PDF Viewer */}
+            <iframe
+              src={pdfUrl}
+              title="Report PDF Viewer"
+              className="w-full h-[80vh] rounded-b-lg"
+              frameBorder="0"
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
