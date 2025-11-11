@@ -422,44 +422,43 @@ export default function AdminHome() {
               </svg>
             </button>
 
-            {/* Profile Dropdown */}
-            <div className="relative" ref={profileDropdownRef}>
-              <button
-                onClick={() => setProfileDropdownOpen(!profileDropdownOpen)}
-                className="h-8 w-8 md:h-10 md:w-10 rounded-full bg-gradient-to-br from-indigo-400 to-purple-600 overflow-hidden hover:opacity-80 transition"
-              >
-                <img
-                  src="https://i.pravatar.cc/150?img=5"
-                  alt="User"
-                  className="w-full h-full object-cover"
-                />
-              </button>
+           {/* Profile Dropdown in Admin Dashboard */}
+<div className="relative" ref={profileDropdownRef}>
+  <button
+    onClick={() => setProfileDropdownOpen(!profileDropdownOpen)}
+    className="h-10 w-10 rounded-full overflow-hidden grid place-items-center transition-all hover:scale-105 bg-gradient-to-br from-yellow-400 via-yellow-500 to-amber-600 shadow-lg shadow-yellow-500/30 ring-2 ring-yellow-300/50"
+  >
+    <span className="text-white text-lg font-bold">A</span>
+  </button>
 
-              {profileDropdownOpen && (
-                <div className="absolute top-full mt-2 right-0 bg-white rounded-lg shadow-lg z-50 min-w-[150px] py-1">
-                  <button
-                    onClick={handleLogout}
-                    className="w-full text-left px-4 py-2 text-gray-700 hover:bg-gray-100 flex items-center gap-2 text-sm font-medium"
-                  >
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      className="h-4 w-4"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    >
-                      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-                      <polyline points="16 17 21 12 16 7" />
-                      <line x1="21" y1="12" x2="9" y2="12" />
-                    </svg>
-                    Logout
-                  </button>
-                </div>
-              )}
-            </div>
+  {profileDropdownOpen && (
+    <div className="absolute top-full mt-2 right-0 bg-white rounded-lg shadow-lg z-50 min-w-[180px] py-2">
+      <div className="px-4 py-2 border-b border-gray-200">
+        <p className="text-sm font-semibold text-gray-900">Admin</p>
+        <p className="text-xs text-gray-500">Administrator</p>
+      </div>
+      <button
+        onClick={handleLogout}
+        className="w-full text-left px-4 py-2 text-gray-700 hover:bg-gray-100 flex items-center gap-2"
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          className="h-4 w-4"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+        >
+          <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+          <polyline points="16 17 21 12 16 7" />
+          <line x1="21" y1="12" x2="9" y2="12" />
+        </svg>
+        Logout
+      </button>
+    </div>
+  )}
+</div>
+
           </div>
         </header>
 

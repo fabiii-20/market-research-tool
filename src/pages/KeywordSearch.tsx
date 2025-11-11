@@ -9,30 +9,55 @@ export default function KeywordSearchPage() {
   const navigate = useNavigate();
   const [keywords, setKeywords] = useState<string[]>([]);
   const [currentKeyword, setCurrentKeyword] = useState<string>("");
-  const [selectedCategories, setSelectedCategories] = useState<Category[]>(["All"]);
+  const [selectedCategories, setSelectedCategories] = useState<Category[]>([
+    "All",
+  ]);
   const [loading, setLoading] = useState<boolean>(false);
   const [items, setItems] = useState<SearchResult[]>([]);
   const [hasSearched, setHasSearched] = useState<boolean>(false);
   const [hoveredId, setHoveredId] = useState<number | null>(null);
-  const [categoryDropdownOpen, setCategoryDropdownOpen] = useState<boolean>(false);
-  const [profileDropdownOpen, setProfileDropdownOpen] = useState<boolean>(false);
+  const [categoryDropdownOpen, setCategoryDropdownOpen] =
+    useState<boolean>(false);
+  const [profileDropdownOpen, setProfileDropdownOpen] =
+    useState<boolean>(false);
   const [isDownloading, setIsDownloading] = useState<boolean>(false);
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [totalPages, setTotalPages] = useState<number>(0);
   const [total, setTotal] = useState<number>(0);
+  const [loadingMessage, setLoadingMessage] = useState("");
 
   const categoryDropdownRef = useRef<HTMLDivElement>(null);
   const profileDropdownRef = useRef<HTMLDivElement>(null);
 
+  const LOADING_MESSAGES = [
+    "Processing your request",
+    "Fetching the latest data",
+    "Aggregating data from multiple sources",
+    "Analyzing results, please wait",
+    "Performing data enrichment",
+    "Compiling data insights",
+    "Almost done — preparing your results",
+  ];
+  const username = localStorage.getItem("username") || "User";
+  const userRole = localStorage.getItem("role") || "user";
+  const firstLetter = username.charAt(0).toUpperCase();
+  const isAdmin = userRole === "admin";
+
   // Close dropdowns when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (categoryDropdownRef.current && !categoryDropdownRef.current.contains(event.target as Node)) {
+      if (
+        categoryDropdownRef.current &&
+        !categoryDropdownRef.current.contains(event.target as Node)
+      ) {
         setCategoryDropdownOpen(false);
       }
-      if (profileDropdownRef.current && !profileDropdownRef.current.contains(event.target as Node)) {
+      if (
+        profileDropdownRef.current &&
+        !profileDropdownRef.current.contains(event.target as Node)
+      ) {
         setProfileDropdownOpen(false);
       }
     };
@@ -40,6 +65,23 @@ export default function KeywordSearchPage() {
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  useEffect(() => {
+    if (!loading) {
+      setLoadingMessage("");
+      return;
+    }
+
+    let messageIndex = 0;
+    setLoadingMessage(LOADING_MESSAGES[0]);
+
+    const interval = setInterval(() => {
+      messageIndex = (messageIndex + 1) % LOADING_MESSAGES.length;
+      setLoadingMessage(LOADING_MESSAGES[messageIndex]);
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [loading]);
 
   const fetchResults = async (page: number = 1) => {
     if (keywords.length === 0) return;
@@ -71,64 +113,85 @@ export default function KeywordSearchPage() {
     }
   };
 
- const handleDownloadReport = async () => {
-  if (keywords.length === 0) {
-    alert("Please perform a search first to generate a report.");
-    return;
-  }
+  // const LoadingMessage = ({ message }: { message: string }) => {
+  //   return (
+  //     <div className="flex flex-col items-center justify-center py-12 space-y-4">
+  //       {/* Spinner */}
+  //       <div className="relative">
+  //         <div className="w-16 h-16 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div>
+  //       </div>
 
-  setIsDownloading(true);
+  //       {/* Message with animated dots */}
+  //       <div className="flex items-center gap-1 text-gray-600 text-lg">
+  //         <span>{message}</span>
+  //         <span className="inline-flex">
+  //           <span className="animate-bounce delay-0">.</span>
+  //           <span className="animate-bounce delay-100">.</span>
+  //           <span className="animate-bounce delay-200">.</span>
+  //         </span>
+  //       </div>
+  //     </div>
+  //   );
+  // };
 
-  try {
-    // Fetch all reports for the current (logged-in) user
-    const reports = await reportAPI.getUserOwnReports();
-
-    if (!reports || reports.length === 0) {
-      alert("No reports found. Please perform a search first.");
+  const handleDownloadReport = async () => {
+    if (keywords.length === 0) {
+      alert("Please perform a search first to generate a report.");
       return;
     }
 
-    // Optionally, sort by created date if needed (descending: most recent first)
-    reports.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    setIsDownloading(true);
 
-    // Get the most recent report
-    const latestReport = reports[0];
+    try {
+      // Fetch all reports for the current (logged-in) user
+      const reports = await reportAPI.getUserOwnReports();
 
-    if (!latestReport.report_id) {
-      alert("Report ID not available. Please try again.");
-      return;
+      if (!reports || reports.length === 0) {
+        alert("No reports found. Please perform a search first.");
+        return;
+      }
+
+      // Optionally, sort by created date if needed (descending: most recent first)
+      reports.sort(
+        (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+      );
+
+      // Get the most recent report
+      const latestReport = reports[0];
+
+      if (!latestReport.report_id) {
+        alert("Report ID not available. Please try again.");
+        return;
+      }
+
+      console.log("Downloading report:", latestReport.report_id);
+
+      // Download the report using report_id
+      await reportAPI.downloadReport(latestReport.report_id);
+    } catch (error) {
+      console.error("Download failed:", error);
+      alert("Failed to download report. Please try again.");
+    } finally {
+      setIsDownloading(false);
     }
-
-    console.log("Downloading report:", latestReport.report_id);
-
-    // Download the report using report_id
-    await reportAPI.downloadReport(latestReport.report_id);
-
-  } catch (error) {
-    console.error("Download failed:", error);
-    alert("Failed to download report. Please try again.");
-  } finally {
-    setIsDownloading(false);
-  }
-};
-
+  };
 
   // ✅ UPDATED: Added 3-letter minimum validation
   const handleAddKeyword = () => {
     const trimmedKeyword = currentKeyword.trim();
-    
+
     // Check if keyword has at least 3 characters
     if (trimmedKeyword.length < 3) {
       alert("Please enter at least 3 letters for a keyword");
       return;
     }
-    
+
     // Check if keyword already exists
     if (keywords.includes(trimmedKeyword)) {
       alert("This keyword has already been added");
       return;
     }
-    
+
     // Add keyword
     setKeywords([...keywords, trimmedKeyword]);
     setCurrentKeyword("");
@@ -139,6 +202,8 @@ export default function KeywordSearchPage() {
   };
 
   const handleGetData = () => {
+    setTotal(0);
+    setItems([]);
     setCurrentPage(1);
     fetchResults(1);
   };
@@ -158,7 +223,9 @@ export default function KeywordSearchPage() {
       } else {
         newCategories.push(cat);
       }
-      setSelectedCategories(newCategories.length === 0 ? ["All"] : newCategories);
+      setSelectedCategories(
+        newCategories.length === 0 ? ["All"] : newCategories
+      );
     }
   };
 
@@ -256,13 +323,27 @@ export default function KeywordSearchPage() {
             <div className="relative" ref={profileDropdownRef}>
               <button
                 onClick={() => setProfileDropdownOpen(!profileDropdownOpen)}
-                className="h-8 w-8 rounded-full bg-white/20 overflow-hidden grid place-items-center hover:bg-white/30 transition"
+                className={`h-10 w-10 rounded-full overflow-hidden grid place-items-center transition-all hover:scale-105 ${
+                  isAdmin
+                    ? "bg-gradient-to-br from-yellow-400 via-yellow-500 to-amber-600 shadow-lg shadow-yellow-500/30 ring-2 ring-yellow-300/50"
+                    : "bg-gradient-to-br from-indigo-500 to-purple-600 shadow-md"
+                }`}
               >
-                <span className="text-white text-xs">👤</span>
+                <span className="text-white text-lg font-bold">
+                  {firstLetter}
+                </span>
               </button>
 
               {profileDropdownOpen && (
-                <div className="absolute top-full mt-2 right-0 bg-white rounded-lg shadow-lg z-50 min-w-[150px] py-1">
+                <div className="absolute top-full mt-2 right-0 bg-white rounded-lg shadow-lg z-50 min-w-[180px] py-2">
+                  <div className="px-4 py-2 border-b border-gray-200">
+                    <p className="text-sm font-semibold text-gray-900">
+                      {username}
+                    </p>
+                    <p className="text-xs text-gray-500 capitalize">
+                      {userRole}
+                    </p>
+                  </div>
                   <button
                     onClick={handleLogout}
                     className="w-full text-left px-4 py-2 text-gray-700 hover:bg-gray-100 flex items-center gap-2"
@@ -274,8 +355,6 @@ export default function KeywordSearchPage() {
                       fill="none"
                       stroke="currentColor"
                       strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
                     >
                       <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
                       <polyline points="16 17 21 12 16 7" />
@@ -354,7 +433,9 @@ export default function KeywordSearchPage() {
                 {/* Category Dropdown */}
                 <div className="relative" ref={categoryDropdownRef}>
                   <button
-                    onClick={() => setCategoryDropdownOpen(!categoryDropdownOpen)}
+                    onClick={() =>
+                      setCategoryDropdownOpen(!categoryDropdownOpen)
+                    }
                     className="h-[54px] whitespace-nowrap inline-flex items-center gap-2 rounded-xl ring-1 ring-gray-200 px-4 text-gray-700 hover:bg-gray-50"
                   >
                     <svg
@@ -365,7 +446,9 @@ export default function KeywordSearchPage() {
                     >
                       <path d="M4 5h16v2H4zM7 11h10v2H7zM10 17h4v2h-4z" />
                     </svg>
-                    <span className="font-medium text-sm">{categoryDisplay}</span>
+                    <span className="font-medium text-sm">
+                      {categoryDisplay}
+                    </span>
                     <svg
                       xmlns="http://www.w3.org/2000/svg"
                       className={`h-4 w-4 text-gray-400 transition-transform ${
@@ -402,19 +485,48 @@ export default function KeywordSearchPage() {
 
                 <button
                   onClick={handleGetData}
-                  disabled={keywords.length === 0}
-                  className="h-[54px] whitespace-nowrap inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-5 text-white hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={keywords.length === 0 || loading}
+                  className="h-[54px] whitespace-nowrap inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-5 text-white hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                 >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    className="h-4 w-4"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                  >
-                    <path d="M12 5v14M5 12h14" strokeWidth="2" />
-                  </svg>
-                  <span className="font-semibold">Get Data</span>
+                  {loading ? (
+                    <>
+                      {/* Spinner Loader */}
+                      <svg
+                        className="animate-spin h-4 w-4"
+                        xmlns="http://www.w3.org/2000/svg"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                      >
+                        <circle
+                          className="opacity-25"
+                          cx="12"
+                          cy="12"
+                          r="10"
+                          stroke="currentColor"
+                          strokeWidth="4"
+                        />
+                        <path
+                          className="opacity-75"
+                          fill="currentColor"
+                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                        />
+                      </svg>
+                      <span className="font-semibold">Loading...</span>
+                    </>
+                  ) : (
+                    <>
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        className="h-4 w-4"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                      >
+                        <path d="M12 5v14M5 12h14" strokeWidth="2" />
+                      </svg>
+                      <span className="font-semibold">Get Data</span>
+                    </>
+                  )}
                 </button>
               </div>
             </div>
@@ -427,7 +539,9 @@ export default function KeywordSearchPage() {
               {/* Results header */}
               <div className="px-6 md:px-8 py-4 flex items-center justify-between">
                 <h2 className="text-gray-800 font-semibold">
-                  Search Results ({total} found)
+                  {loading && total === 0
+                    ? "Searching..."
+                    : `Search Results (${total} found)`}
                 </h2>
                 {items.length > 0 && (
                   <button
@@ -442,7 +556,10 @@ export default function KeywordSearchPage() {
                       fill="none"
                       stroke="currentColor"
                     >
-                      <path d="M12 3v12m0 0l4-4m-4 4l-4-4M5 21h14" strokeWidth="2" />
+                      <path
+                        d="M12 3v12m0 0l4-4m-4 4l-4-4M5 21h14"
+                        strokeWidth="2"
+                      />
                     </svg>
                     <span className="text-sm font-semibold">
                       {isDownloading ? "Downloading..." : "Download Report"}
@@ -454,7 +571,37 @@ export default function KeywordSearchPage() {
               {/* Results list */}
               <div className="px-6 md:px-8 pb-6 space-y-4">
                 {loading ? (
-                  <div className="p-8 text-center text-gray-500">Loading results…</div>
+                  <div className="flex flex-col items-center justify-center py-16 space-y-6">
+                    {/* Spinner */}
+                    <div className="relative">
+                      <div className="w-16 h-16 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div>
+                    </div>
+
+                    {/* Animated Loading Message with Dots */}
+                    <div className="flex items-center gap-1 text-gray-600 text-lg font-medium">
+                      <span>{loadingMessage}</span>
+                      <span className="inline-flex gap-0.5">
+                        <span
+                          className="animate-bounce"
+                          style={{ animationDelay: "0s" }}
+                        >
+                          .
+                        </span>
+                        <span
+                          className="animate-bounce"
+                          style={{ animationDelay: "0.2s" }}
+                        >
+                          .
+                        </span>
+                        <span
+                          className="animate-bounce"
+                          style={{ animationDelay: "0.4s" }}
+                        >
+                          .
+                        </span>
+                      </span>
+                    </div>
+                  </div>
                 ) : items.length === 0 ? (
                   <div className="p-8 text-center text-gray-500">
                     No results found for "{keywords.join(", ")}" in{" "}
@@ -478,7 +625,9 @@ export default function KeywordSearchPage() {
                         </div>
                         <div className="flex-1">
                           <div className="flex items-center gap-2 mb-1">
-                            <h3 className="text-gray-900 font-semibold">{r.title}</h3>
+                            <h3 className="text-gray-900 font-semibold">
+                              {r.title}
+                            </h3>
                             <span className="text-xs px-2 py-1 rounded-full bg-indigo-100 text-indigo-700 font-medium">
                               {r.category}
                             </span>
@@ -499,7 +648,10 @@ export default function KeywordSearchPage() {
                                 fill="none"
                                 stroke="currentColor"
                               >
-                                <path d="M5 12h14M13 5l7 7-7 7" strokeWidth="2" />
+                                <path
+                                  d="M5 12h14M13 5l7 7-7 7"
+                                  strokeWidth="2"
+                                />
                               </svg>
                             </a>
                           </div>
@@ -516,7 +668,8 @@ export default function KeywordSearchPage() {
                   <p className="text-sm text-gray-500">
                     Showing {(currentPage - 1) * 4 + 1} to{" "}
                     {Math.min(currentPage * 4, total)} of{" "}
-                    <span className="font-semibold text-gray-700">{total}</span> results
+                    <span className="font-semibold text-gray-700">{total}</span>{" "}
+                    results
                   </p>
                   <div className="flex items-center gap-2">
                     <button
@@ -529,7 +682,10 @@ export default function KeywordSearchPage() {
 
                     {getPageNumbers().map((page, idx) =>
                       page === "..." ? (
-                        <span key={`ellipsis-${idx}`} className="px-2 text-gray-400">
+                        <span
+                          key={`ellipsis-${idx}`}
+                          className="px-2 text-gray-400"
+                        >
                           …
                         </span>
                       ) : (

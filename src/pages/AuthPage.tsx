@@ -128,23 +128,6 @@ export default function AuthPage() {
                     {loading ? "Logging in..." : "Login"}
                   </button>
                 </form>
-
-                {/* Demo credentials - OPTIONAL: Uncomment when you have credentials */}
-                {/* <div className="mt-4 sm:mt-6 p-3 sm:p-4 bg-blue-50 rounded-lg text-xs sm:text-sm text-gray-600">
-                  <p className="font-semibold mb-2">Demo Credentials:</p>
-                  <div className="space-y-1">
-                    <p>
-                      <span className="text-gray-700">Admin:</span>{" "}
-                      <code className="bg-white px-2 py-1 rounded text-xs">admin@example.com</code> /{" "}
-                      <code className="bg-white px-2 py-1 rounded text-xs">Admin@123</code>
-                    </p>
-                    <p>
-                      <span className="text-gray-700">User:</span>{" "}
-                      <code className="bg-white px-2 py-1 rounded text-xs">user@example.com</code> /{" "}
-                      <code className="bg-white px-2 py-1 rounded text-xs">User@123</code>
-                    </p>
-                  </div>
-                </div> */}
               </div>
             </div>
           </div>
