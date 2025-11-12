@@ -64,7 +64,6 @@ export default function UserManagement() {
           role?: "user" | "admin";
         } = {
           email: formData.email,
-          role: "user", // ✅ Always set to "user"
         };
         
         if (formData.password.trim()) {
@@ -99,7 +98,6 @@ export default function UserManagement() {
           formData.username,
           formData.email,
           formData.password,
-          "user"
         );
         
         if (!result.success) {

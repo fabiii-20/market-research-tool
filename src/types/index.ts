@@ -1,3 +1,5 @@
+
+
 export type AuthMode = "login";
 export type UserRole = "user" | "admin";
 export type Category = "All" | "News" | "Articles" | "Papers";
@@ -11,6 +13,7 @@ export interface SearchResultItem {
 }
 
 export interface Report {
+  username: string;
   id: number;
   date: string;
   keywords: string[];

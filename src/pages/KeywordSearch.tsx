@@ -22,6 +22,8 @@ export default function KeywordSearchPage() {
   const [error, setError] = useState<string>("");
   const [searchStatus, setSearchStatus] = useState<'idle' | 'initiating' | 'fetching' | 'complete'>('idle');
   const [loadingMessage, setLoadingMessage] = useState<string>("");
+  const [isPageChanging, setIsPageChanging] = useState(false);
+
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState<number>(1);
@@ -88,17 +90,21 @@ useEffect(() => {
     return;
   }
 
-  const messages = searchStatus === 'fetching' 
-    ? LOADING_MESSAGES.fetching 
-    : LOADING_MESSAGES.initiating;
+  // 👇 If page change, just show “Loading…” instead of rotating messages
+  if (isPageChanging) {
+    setLoadingMessage("Loading...");
+    return;
+  }
+
+  const messages =
+    searchStatus === "fetching"
+      ? LOADING_MESSAGES.fetching
+      : LOADING_MESSAGES.initiating;
 
   let messageIndex = 0;
   setLoadingMessage(messages[0]);
 
-  // Don't rotate if completing
-  if (searchStatus === 'fetching') {
-    return;
-  }
+  if (searchStatus === "fetching") return;
 
   const interval = setInterval(() => {
     messageIndex = (messageIndex + 1) % messages.length;
@@ -106,7 +112,8 @@ useEffect(() => {
   }, 3000);
 
   return () => clearInterval(interval);
-}, [loading, searchStatus]);
+}, [loading, searchStatus, isPageChanging]);
+
 
 
 
@@ -220,8 +227,9 @@ const handlePageChange = async (newPage: number) => {
   }
 
   try {
+    setIsPageChanging(true);
     setLoading(true);
-    setSearchStatus('initiating'); // ✅ Use initiating (not fetching)
+    setSearchStatus('fetching');
     
     const response = await searchAPI.fetchSearchResults(
       currentSearchId,
@@ -230,7 +238,6 @@ const handlePageChange = async (newPage: number) => {
       4
     );
 
-    setSearchStatus('fetching');
     await new Promise(resolve => setTimeout(resolve, 800));
 
     setSearchStatus('complete');
@@ -243,10 +250,9 @@ const handlePageChange = async (newPage: number) => {
     setSearchStatus('idle');
   } finally {
     setLoading(false);
+    setIsPageChanging(false); // 👈 reset
   }
 };
-
-
 
 const handleCategoryToggle = (cat: Category) => {
     if (cat === "All") {

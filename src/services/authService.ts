@@ -92,29 +92,37 @@ export const authService = {
     username: string,
     email: string,
     password: string,
-    role: string
   ): Promise<{ success: boolean; message: string }> {
     try {
+       const requestBody = { username, email, password };
+        console.log("Add User Request Payload:", requestBody);
       const response = await apiRequest<AddUserResponse>("/api/admin/add-user", {
         method: "POST",
         body: JSON.stringify({
           username,
           email,
           password,
-          role,
         }),
       });
+     
 
       return {
         success: response.status === "success",
         message: response.message || "User added successfully",
       };
     } catch (error) {
-      return {
-        success: false,
-        message: error instanceof Error ? error.message : "Failed to add user",
-      };
-    }
+  if (error instanceof Error) {
+    console.error("Add User API error:", error.message, error);
+    return { success: false, message: error.message };
+  } else if (typeof error === "object") {
+    console.error("Add User API error object:", JSON.stringify(error));
+    return { success: false, message: "Failed to add user (see console for details)" };
+  } else {
+    console.error("Unknown Add User API error:", error);
+    return { success: false, message: "Failed to add user" };
+  }
+}
+
   },
 
   async changeUserStatus(
