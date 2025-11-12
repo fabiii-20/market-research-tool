@@ -7,46 +7,62 @@ import { reportAPI } from "../services/reportApi";
 
 export default function KeywordSearchPage() {
   const navigate = useNavigate();
+  //states
   const [keywords, setKeywords] = useState<string[]>([]);
   const [currentKeyword, setCurrentKeyword] = useState<string>("");
-  const [selectedCategories, setSelectedCategories] = useState<Category[]>([
-    "All",
-  ]);
+  const [selectedCategories, setSelectedCategories] = useState<Category[]>(["All"]);
   const [loading, setLoading] = useState<boolean>(false);
   const [items, setItems] = useState<SearchResult[]>([]);
   const [hasSearched, setHasSearched] = useState<boolean>(false);
   const [hoveredId, setHoveredId] = useState<number | null>(null);
-  const [categoryDropdownOpen, setCategoryDropdownOpen] =
-    useState<boolean>(false);
-  const [profileDropdownOpen, setProfileDropdownOpen] =
-    useState<boolean>(false);
+  const [categoryDropdownOpen, setCategoryDropdownOpen] = useState<boolean>(false);
+  const [profileDropdownOpen, setProfileDropdownOpen] = useState<boolean>(false);
   const [isDownloading, setIsDownloading] = useState<boolean>(false);
+  const [currentSearchId, setCurrentSearchId] = useState<string>("");
+  const [error, setError] = useState<string>("");
+  const [searchStatus, setSearchStatus] = useState<'idle' | 'initiating' | 'fetching' | 'complete'>('idle');
+  const [loadingMessage, setLoadingMessage] = useState<string>("");
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [totalPages, setTotalPages] = useState<number>(0);
   const [total, setTotal] = useState<number>(0);
-  const [loadingMessage, setLoadingMessage] = useState("");
 
+  //refs
   const categoryDropdownRef = useRef<HTMLDivElement>(null);
   const profileDropdownRef = useRef<HTMLDivElement>(null);
 
-  const LOADING_MESSAGES = [
+  //constants
+  const LOADING_MESSAGES = {
+  initiating: [
     "Processing your request",
+    "Analyzing keywords",
+    "Preparing search query",
     "Fetching the latest data",
     "Aggregating data from multiple sources",
     "Analyzing results, please wait",
     "Performing data enrichment",
     "Compiling data insights",
-    "Almost done — preparing your results",
-  ];
-  const username = localStorage.getItem("username") || "User";
-  const userRole = localStorage.getItem("role") || "user";
-  const firstLetter = username.charAt(0).toUpperCase();
+  ],
+  fetching: [
+     "Almost done — preparing your results",
+  ]
+
+};
+
+  
+  const currentUser = localStorage.getItem("currentUser");
+const email = currentUser ? JSON.parse(currentUser).email : "user@example.com";
+const userRole = localStorage.getItem("role") || "user";
+const firstLetter = email.charAt(0).toUpperCase();
   const isAdmin = userRole === "admin";
+ const categories: Category[] = ["All", "News", "Articles", "Papers"];
+  const categoryDisplay = selectedCategories.includes("All")
+    ? "All Categories"
+    : selectedCategories.join(", ");
 
   // Close dropdowns when clicking outside
-  useEffect(() => {
+ useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (
         categoryDropdownRef.current &&
@@ -65,118 +81,101 @@ export default function KeywordSearchPage() {
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+  //loading mesaages useeffect
+useEffect(() => {
+  if (!loading) {
+    setLoadingMessage("");
+    return;
+  }
 
-  useEffect(() => {
-    if (!loading) {
-      setLoadingMessage("");
-      return;
-    }
+  const messages = searchStatus === 'fetching' 
+    ? LOADING_MESSAGES.fetching 
+    : LOADING_MESSAGES.initiating;
 
-    let messageIndex = 0;
-    setLoadingMessage(LOADING_MESSAGES[0]);
+  let messageIndex = 0;
+  setLoadingMessage(messages[0]);
 
-    const interval = setInterval(() => {
-      messageIndex = (messageIndex + 1) % LOADING_MESSAGES.length;
-      setLoadingMessage(LOADING_MESSAGES[messageIndex]);
-    }, 3000);
+  // Don't rotate if completing
+  if (searchStatus === 'fetching') {
+    return;
+  }
 
-    return () => clearInterval(interval);
-  }, [loading]);
+  const interval = setInterval(() => {
+    messageIndex = (messageIndex + 1) % messages.length;
+    setLoadingMessage(messages[messageIndex]);
+  }, 3000);
 
-  const fetchResults = async (page: number = 1) => {
-    if (keywords.length === 0) return;
+  return () => clearInterval(interval);
+}, [loading, searchStatus]);
 
+
+
+
+//handlefunctions
+const handleSearch = async (page = 1) => {
+  if (keywords.length === 0) {
+    setError("Please add at least one keyword");
+    return;
+  }
+
+  try {
     setLoading(true);
-    setHasSearched(true);
+    setError("");
+    setSearchStatus('initiating');
 
-    try {
-      const categoryToSearch = selectedCategories.includes("All")
-        ? "All"
-        : selectedCategories[0];
+    const response = await searchAPI.search(
+      keywords.join(" "),
+      selectedCategories,
+      page,
+      4
+    );
 
-      const data = await searchAPI.search(
-        keywords.join(" "),
-        categoryToSearch,
-        page,
-        4
-      );
+    setSearchStatus('fetching');
+    await new Promise(resolve => setTimeout(resolve, 800));
 
-      setItems(data.results);
-      setTotal(data.total);
-      setTotalPages(data.totalPages);
-      setCurrentPage(page);
-    } catch (error) {
-      console.error("Search failed:", error);
-      setItems([]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // const LoadingMessage = ({ message }: { message: string }) => {
-  //   return (
-  //     <div className="flex flex-col items-center justify-center py-12 space-y-4">
-  //       {/* Spinner */}
-  //       <div className="relative">
-  //         <div className="w-16 h-16 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div>
-  //       </div>
-
-  //       {/* Message with animated dots */}
-  //       <div className="flex items-center gap-1 text-gray-600 text-lg">
-  //         <span>{message}</span>
-  //         <span className="inline-flex">
-  //           <span className="animate-bounce delay-0">.</span>
-  //           <span className="animate-bounce delay-100">.</span>
-  //           <span className="animate-bounce delay-200">.</span>
-  //         </span>
-  //       </div>
-  //     </div>
-  //   );
-  // };
+    setSearchStatus('complete');
+    setItems(response.results);
+    setTotal(response.total);
+    setCurrentPage(response.page);
+    setTotalPages(response.totalPages);
+    setCurrentSearchId(response.searchId);
+  } catch (err) {
+    setError(err instanceof Error ? err.message : "Search failed");
+    setItems([]);
+    setTotal(0);
+    setSearchStatus('idle');
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleDownloadReport = async () => {
-    if (keywords.length === 0) {
-      alert("Please perform a search first to generate a report.");
-      return;
-    }
 
-    setIsDownloading(true);
+  if (keywords.length === 0) {
+    alert("Please perform a search first to generate a report.");
+    return;
+  }
 
-    try {
-      // Fetch all reports for the current (logged-in) user
-      const reports = await reportAPI.getUserOwnReports();
+  if (!currentSearchId) {
+    alert("No active search found. Please search again to download the report.");
+    return;
+  }
 
-      if (!reports || reports.length === 0) {
-        alert("No reports found. Please perform a search first.");
-        return;
-      }
+  setIsDownloading(true);
 
-      // Optionally, sort by created date if needed (descending: most recent first)
-      reports.sort(
-        (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
-      );
+  try {
+   
+    await reportAPI.downloadReport(currentSearchId);
+    
+  } catch (error) {
+    console.error("Download failed:", error);
+    alert("Failed to download report. Please try again.");
+  } finally {
+    setIsDownloading(false);
+  }
+};
 
-      // Get the most recent report
-      const latestReport = reports[0];
 
-      if (!latestReport.report_id) {
-        alert("Report ID not available. Please try again.");
-        return;
-      }
-
-      console.log("Downloading report:", latestReport.report_id);
-
-      // Download the report using report_id
-      await reportAPI.downloadReport(latestReport.report_id);
-    } catch (error) {
-      console.error("Download failed:", error);
-      alert("Failed to download report. Please try again.");
-    } finally {
-      setIsDownloading(false);
-    }
-  };
-
-  // ✅ UPDATED: Added 3-letter minimum validation
   const handleAddKeyword = () => {
     const trimmedKeyword = currentKeyword.trim();
 
@@ -201,19 +200,55 @@ export default function KeywordSearchPage() {
     setKeywords(keywords.filter((k) => k !== keyword));
   };
 
-  const handleGetData = () => {
+ const handleGetData = () => {
+    if (keywords.length === 0) {
+      alert("Please add at least one keyword");
+      return;
+    }
+    setHasSearched(true);
     setTotal(0);
     setItems([]);
     setCurrentPage(1);
-    fetchResults(1);
+    
+    handleSearch(1);
   };
 
-  const handlePageChange = (page: number) => {
-    if (page < 1 || page > totalPages) return;
-    fetchResults(page);
-  };
+const handlePageChange = async (newPage: number) => {
+  if (!currentSearchId) {
+    await handleSearch(newPage);
+    return;
+  }
 
-  const handleCategoryToggle = (cat: Category) => {
+  try {
+    setLoading(true);
+    setSearchStatus('initiating'); // ✅ Use initiating (not fetching)
+    
+    const response = await searchAPI.fetchSearchResults(
+      currentSearchId,
+      selectedCategories,
+      newPage,
+      4
+    );
+
+    setSearchStatus('fetching');
+    await new Promise(resolve => setTimeout(resolve, 800));
+
+    setSearchStatus('complete');
+    setItems(response.results);
+    setTotal(response.total);
+    setCurrentPage(response.page);
+    setTotalPages(response.totalPages);
+  } catch (err) {
+    setError(err instanceof Error ? err.message : "Failed to fetch results");
+    setSearchStatus('idle');
+  } finally {
+    setLoading(false);
+  }
+};
+
+
+
+const handleCategoryToggle = (cat: Category) => {
     if (cat === "All") {
       setSelectedCategories(["All"]);
     } else {
@@ -234,7 +269,6 @@ export default function KeywordSearchPage() {
     navigate("/");
   };
 
-  // ✅ UPDATED: Added validation on Enter key press
   const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") {
       e.preventDefault(); // Prevent form submission
@@ -273,11 +307,6 @@ export default function KeywordSearchPage() {
 
     return pages;
   };
-
-  const categories: Category[] = ["All", "News", "Articles", "Papers"];
-  const categoryDisplay = selectedCategories.includes("All")
-    ? "All Categories"
-    : selectedCategories.join(", ");
 
   return (
     <div className="min-h-screen bg-[#1e1c2b]">
@@ -338,7 +367,7 @@ export default function KeywordSearchPage() {
                 <div className="absolute top-full mt-2 right-0 bg-white rounded-lg shadow-lg z-50 min-w-[180px] py-2">
                   <div className="px-4 py-2 border-b border-gray-200">
                     <p className="text-sm font-semibold text-gray-900">
-                      {username}
+                      {email}
                     </p>
                     <p className="text-xs text-gray-500 capitalize">
                       {userRole}
@@ -490,7 +519,6 @@ export default function KeywordSearchPage() {
                 >
                   {loading ? (
                     <>
-                      {/* Spinner Loader */}
                       <svg
                         className="animate-spin h-4 w-4"
                         xmlns="http://www.w3.org/2000/svg"
@@ -532,6 +560,15 @@ export default function KeywordSearchPage() {
             </div>
           </div>
 
+          {/* Error display */}
+          {error && (
+            <div className="px-6 md:px-8 py-3">
+              <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                <p className="text-red-800 text-sm">{error}</p>
+              </div>
+            </div>
+          )}
+                
           {hasSearched && (
             <>
               <hr className="border-gray-100" />
@@ -674,7 +711,7 @@ export default function KeywordSearchPage() {
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => handlePageChange(currentPage - 1)}
-                      disabled={currentPage === 1}
+                      disabled={currentPage === 1 || loading}
                       className="px-3 py-2 rounded-lg ring-1 ring-gray-200 text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       Previous
@@ -705,7 +742,7 @@ export default function KeywordSearchPage() {
 
                     <button
                       onClick={() => handlePageChange(currentPage + 1)}
-                      disabled={currentPage === totalPages}
+                      disabled={currentPage === totalPages || loading}
                       className="px-3 py-2 rounded-lg ring-1 ring-gray-200 text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       Next

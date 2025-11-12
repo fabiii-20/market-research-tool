@@ -39,7 +39,6 @@ export const authService = {
       });
 
       if (response.status === "success" && response.token) {
-        // ✅ FIXED: Use consistent token key
         localStorage.setItem("auth_token", response.token);
         
         const user: UserAccount = {
@@ -71,7 +70,7 @@ export const authService = {
   },
 
   logout(): void {
-    localStorage.removeItem("auth_token");  // ✅ FIXED
+    localStorage.removeItem("auth_token");
     localStorage.removeItem("currentUser");
   },
 
@@ -86,10 +85,15 @@ export const authService = {
   },
 
   isAuthenticated(): boolean {
-    return !!localStorage.getItem("auth_token");  // ✅ FIXED
+    return !!localStorage.getItem("auth_token");
   },
 
-  async addUser(username: string, email: string, password: string, role: string): Promise<{ success: boolean; message: string }> {
+  async addUser(
+    username: string,
+    email: string,
+    password: string,
+    role: string
+  ): Promise<{ success: boolean; message: string }> {
     try {
       const response = await apiRequest<AddUserResponse>("/api/admin/add-user", {
         method: "POST",
@@ -113,7 +117,10 @@ export const authService = {
     }
   },
 
-  async changeUserStatus(userId: string, status: string): Promise<{ success: boolean; message: string }> {
+  async changeUserStatus(
+    userId: string,
+    status: string
+  ): Promise<{ success: boolean; message: string }> {
     try {
       const response = await apiRequest<{ status: string; message: string }>(
         `/api/admin/change-status/${userId}`,
@@ -135,43 +142,65 @@ export const authService = {
     }
   },
 
-  async getAllUsers(): Promise<UserAccount[]> {
-    try {
-      const response = await apiRequest<{ users: BackendUser[] }>("/api/admin/users");
+async getAllUsers(): Promise<{
+  users: UserAccount[];
+}> {
+  try {
+    const response = await apiRequest<{
+      users: BackendUser[];
+    }>("/api/admin/users", {
+      method: "GET",
+    });
 
-      return response.users.map((u, index) => ({
-        id: u.id || String(index),
-        username: u.username,
-        email: u.email,
-        password: "",
-        role: (u.role as "user" | "admin") || "user",
-        status: (u.status as "active" | "inactive") || "active",
-        createdAt: u.created_at || new Date().toISOString(),
-        reportsCount: u.total_reports || 0,
-      }));
+    const users: UserAccount[] = response.users.map((u) => ({
+      id: u.id || u.email,
+      username: u.username,
+      email: u.email,
+      password: "",
+      role: (u.role as "user" | "admin") || "user",
+      status: (u.status as "active" | "inactive") || "active",
+      createdAt: u.created_at || new Date().toISOString(),
+      reportsCount: u.total_reports || 0,
+    }));
+
+    return {
+      users,
+    };
+  } catch (error) {
+    console.error("Error fetching users:", error);
+    return { users: [] };
+  }
+},
+
+  // ✅ UPDATED: Add role support
+  async updateUser(
+    userId: string,
+    updates: {
+      username?: string;
+      email?: string;
+      password?: string;
+      role?: "user" | "admin"; // ✅ Add role support
+    }
+  ): Promise<{ success: boolean; message?: string }> {
+    try {
+      const response = await apiRequest<{ status: string; message: string }>(
+        `/api/admin/update-user/${userId}`,
+        {
+          method: "PATCH",
+          body: JSON.stringify(updates),
+        }
+      );
+
+      return {
+        success: response.status === "success",
+        message: response.message,
+      };
     } catch (error) {
-      console.error("Error fetching users:", error);
-      return [];
+      console.error("Error updating user:", error);
+      return { 
+        success: false, 
+        message: error instanceof Error ? error.message : "Failed to update user" 
+      };
     }
   },
-
-
-async updateUser(
-  userId: string,
-  data: { email?: string; password?: string }
-): Promise<{ success: boolean; message?: string }> {
-  try {
-    await apiRequest(`/api/admin/update-user/${userId}`, {
-      method: 'PATCH',
-      body: JSON.stringify(data),
-    });
-    return { success: true };
-  } catch (err) {
-    console.error('Error updating user:', err);
-    return { success: false, message: 'Failed to update user' };
-  }
-}
-
-
-
 };

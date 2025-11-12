@@ -2,13 +2,12 @@ export type AuthMode = "login";
 export type UserRole = "user" | "admin";
 export type Category = "All" | "News" | "Articles" | "Papers";
 
-export interface SearchResult {
-  id: number;
-  title: string;
-  desc: string;
-  // cta?: string;
-  category: Category;
-  link?: string; // Add this line - some results have external links
+
+export interface SearchResultItem {
+  topic: string;
+  summary: string;
+  link: string;
+  data_type: string;
 }
 
 export interface Report {
@@ -17,8 +16,8 @@ export interface Report {
   keywords: string[];
   user: string;
   categories?: Category[];
-  report_link?: string; // Add this line - for PDF download links
-  report_id?: string;
+  reportLink?: string; 
+  reportId?: string;
 }
 
 export interface UserAccount {
@@ -52,3 +51,46 @@ export interface SearchActivity {
   categories: Category[];
   timestamp: number;
 }
+
+//Paginated response interface
+export interface PaginatedResponse<T> {
+  status: string;
+  data: T[];
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
+}
+
+//Backend research data item
+export interface ResearchDataItem {
+  topic: string;
+  summary: string;
+  link: string;
+  data_type: string;
+}
+
+//Search request with search_id
+export interface SearchRequest {
+  search_id: string;
+  keywords: string[];
+  data_type: string[];
+}
+
+//Get data response
+export interface GetDataResponse {
+  status: string;
+  message: string;
+  search_id: string;
+}
+
+// Update SearchResult to include data_type
+export interface SearchResult {
+  id: number;
+  title: string;
+  desc: string;
+  category: Category;
+  link?: string;
+  data_type?: string;
+}
+

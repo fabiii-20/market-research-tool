@@ -7,18 +7,29 @@ interface AnalyticsResponse {
 }
 
 interface BackendReport {
-  report_id: string;
+  report_id?: string;
+  reportId?: string;
+  id?: string;
   created_at: string;
+  createdat?: string;
   keywords: string[];
+  user_id?: string;
+  userid?: string;
   parameters?: {
     data_type?: string | string[];
+    user_id?: string;
     [key: string]: unknown;
   };
+  reportLink?: string;
   report_link?: string;
 }
 
 interface ReportsResponse {
   reports: BackendReport[];
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
 }
 
 interface AnalyticsRequestBody {
@@ -37,10 +48,26 @@ interface BackendUser {
   total_reports?: number;
 }
 
+interface SearchResultItem {
+  search_id: string;
+  date: string;
+  keywords: string[];
+  data_types: string[];
+  user_id: string;
+  username: string;
+  email: string;
+}
+
+interface SearchResultsResponse {
+  searches: SearchResultItem[];
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
+}
 const toCategory = (dataType?: string | string[]): Category[] => {
   if (!dataType) return [];
   
-  // Handle both string and array
   const types = Array.isArray(dataType) ? dataType : [dataType];
   
   const mapping: Record<string, Category> = {
@@ -54,7 +81,7 @@ const toCategory = (dataType?: string | string[]): Category[] => {
   for (const type of types) {
     if (typeof type === 'string') {
       const category = mapping[type.toLowerCase()];
-      if (category) {
+      if (category && !categories.includes(category)) {
         categories.push(category);
       }
     }
@@ -91,203 +118,338 @@ export const reportAPI = {
       return { totalUsers: 0, reportsGenerated: 0 };
     }
   },
-
-  async getReports(
+  async getAdminSearchResults(
     userId: string = "all",
+    page: number = 1,
+    pageSize: number = 10,
     fromDate?: string,
     toDate?: string
   ): Promise<{
     reports: Report[];
+    total: number;
+    totalPages: number;
+    currentPage: number;
     totalUsers: number;
     reportsGenerated: number;
   }> {
     try {
-      // console.log("📊 Getting reports for:", userId);
-
-      // Get analytics first
       const analytics = await this.getAnalytics(
         !!(fromDate || toDate),
         fromDate,
         toDate
       );
 
-      // Handle "All Users" case
-      if (userId === "All Users" || userId === "all") {
-        // console.log("📊 Fetching all users' reports...");
-
-        // Get all users
-        const usersResponse = await apiRequest<{ users: BackendUser[] }>("/api/admin/users");
-        // console.log("👥 Users found:", usersResponse.users.length);
-        // console.log("👥 Users data:", usersResponse.users);
-
-        const allReports: Report[] = [];
-
-        // Fetch reports for each user
-        for (const user of usersResponse.users) {
-          try {
-            const userIdToUse = user.id;
-            
-            if (!userIdToUse) {
-              console.warn(`⚠️ User ${user.email} has no ID, skipping...`);
-              continue;
-            }
-            
-            // console.log(`📊 Fetching reports for user ID: ${userIdToUse} (${user.email})`);
-            
-            const userReportsResponse = await apiRequest<ReportsResponse>(
-              `/api/admin/reports/${userIdToUse}`
-            );
-
-            // console.log(`✅ Found ${userReportsResponse.reports.length} reports for user ${userIdToUse}`);
-
-            const userReports: Report[] = userReportsResponse.reports.map((r, index): Report => ({
-              id: allReports.length + index + 1,
-              date: new Date(r.created_at).toISOString().split("T")[0],
-              keywords: r.keywords || [],
-              user: user.email || user.username,
-              categories: toCategory(r.parameters?.data_type),
-              report_link: r.report_link,
-              report_id: r.report_id,
-            }));
-
-            allReports.push(...userReports);
-          } catch (error) {
-            console.warn(`⚠️ Failed to fetch reports for user ${user.id} (${user.email}):`, error);
-          }
-        }
-
-        // console.log(`✅ Total reports fetched: ${allReports.length}`);
-
-        return {
-          reports: allReports,
-          totalUsers: analytics.totalUsers,
-          reportsGenerated: analytics.reportsGenerated,
-        };
+      // ✅ Build query params
+      let queryParams = `page=${page}&page_size=${pageSize}`;
+      
+      if (userId !== "all" && userId !== "All Users") {
+        queryParams += `&user_id=${userId}`;
       }
 
-      // Single user
-      // console.log(`📊 Fetching reports for single user: ${userId}`);
-      
-      let userIdToUse = userId;
-      if (userId.includes("@") || isNaN(Number(userId))) {
-        // console.log("📧 Converting email/username to numeric ID...");
-        try {
-          const usersResponse = await apiRequest<{ users: BackendUser[] }>("/api/admin/users");
-          const user = usersResponse.users.find(u => u.email === userId || u.username === userId);
-          if (user && user.id) {
-            userIdToUse = user.id;
-            // console.log(`✅ Found numeric ID: ${userIdToUse}`);
-          }
-        } catch (error) {
-          console.warn("Could not fetch users to find numeric ID:", error);
-        }
-      }
-      
-      const response = await apiRequest<ReportsResponse>(
-        `/api/admin/reports/${userIdToUse}`
+      const response = await apiRequest<SearchResultsResponse>(
+        `/api/admin/search-results?${queryParams}`
       );
 
-      const reports: Report[] = response.reports.map((r, index): Report => ({
-        id: index + 1,
-        date: new Date(r.created_at).toISOString().split("T")[0],
-        keywords: r.keywords || [],
-        user: userId,
-        categories: toCategory(r.parameters?.data_type),
-        report_link: r.report_link,
-        report_id: r.report_id,
-      }));
+     
 
-      // console.log(`✅ Found ${reports.length} reports for user ID ${userIdToUse}`);
+      // ✅ Transform to Report format
+     const reports: Report[] = response.searches.map((search, index) => ({
+  id: (page - 1) * pageSize + index + 1,
+  date: new Date(search.date).toISOString().split("T")[0],
+  keywords: search.keywords || [],
+  user: search.username 
+    ? `${search.username} `  
+    : search.email || search.username || "user@example.com", // Fallback
+  categories: search.data_types.map(dt => {
+    const mapping: Record<string, Category> = {
+      news: "News",
+      article: "Articles",
+      research: "Papers",
+    };
+    return mapping[dt] || "All";
+  }) as Category[],
+  reportLink: `/api/download-report/${search.search_id}`,
+  reportId: search.search_id,
+}));
 
       return {
         reports,
+        total: response.total,
+        totalPages: response.total_pages,
+        currentPage: response.page,
         totalUsers: analytics.totalUsers,
         reportsGenerated: analytics.reportsGenerated,
       };
     } catch (error) {
-      console.error("❌ Error fetching reports:", error);
-      return { reports: [], totalUsers: 0, reportsGenerated: 0 };
+      console.error("❌ Error fetching search results:", error);
+      return {
+        reports: [],
+        total: 0,
+        totalPages: 0,
+        currentPage: 1,
+        totalUsers: 0,
+        reportsGenerated: 0,
+      };
     }
   },
 
-  // ✅ NEW: Fetch current user's own reports using /api/reports
- async getUserOwnReports(): Promise<Report[]> {
+
+  // ✅ ADMIN: Get all reports - accepts user_id and displays emails
+  async getAdminReports(
+    userId: string = "all", // ✅ Receives user_id from AdminDashboard
+    page: number = 1,
+    pageSize: number = 10,
+    fromDate?: string,
+    toDate?: string
+  ): Promise<{
+    reports: Report[];
+    total: number;
+    totalPages: number;
+    currentPage: number;
+    totalUsers: number;
+    reportsGenerated: number;
+  }> {
+    try {
+      const analytics = await this.getAnalytics(
+        !!(fromDate || toDate),
+        fromDate,
+        toDate
+      );
+
+      // ✅ Build query with user_id (AdminDashboard already converts email→id)
+      let queryParams = `page=${page}&page_size=${pageSize}`;
+      
+      if (userId !== "all" && userId !== "All Users") {
+        queryParams += `&user_id=${userId}`;
+      }
+
+      const response = await apiRequest<ReportsResponse>(
+        `/api/admin/reports?${queryParams}`
+      );
+
+    
+
+      // ✅ Fetch ALL users to build email map
+      const usersResponse = await apiRequest<{
+        users: BackendUser[];
+      }>("/api/admin/users?page=1&page_size=1000");
+
+      // ✅ Build both id→user and email→user maps
+      const userIdMap = new Map<string, BackendUser>();
+      const userEmailMap = new Map<string, string>(); // id → email
+      
+      usersResponse.users.forEach(u => {
+        if (u.id) {
+          userIdMap.set(u.id, u);
+          userEmailMap.set(u.id, u.email);
+        }
+      });
+
+
+      const reports: Report[] = response.reports.map((r, index) => {
+        // ✅ Get report_id
+        const reportId = r.report_id || r.reportId || r.id;
+        
+        if (!reportId) {
+          console.error(`❌ Report ${index} missing report_id`);
+        }
+
+        const reportLink = r.report_link || r.reportLink;
+        const createdAt = r.created_at || r.createdat || new Date().toISOString();
+        
+        // ✅ Try to find user_id from multiple locations
+        const reportUserId = r.user_id || r.userid || r.parameters?.user_id;
+        
+        // ✅ Get email from user map
+        let userEmail = "user@example.com"; // Default
+        
+        if (reportUserId && userEmailMap.has(reportUserId)) {
+          userEmail = userEmailMap.get(reportUserId)!;
+        } else if (userId !== "all" && userId !== "All Users" && userIdMap.has(userId)) {
+          // If filtering by specific user and no user_id in report, use filter
+          userEmail = userIdMap.get(userId)!.email;
+        }
+
+
+
+        return {
+          id: (page - 1) * pageSize + index + 1,
+          date: new Date(createdAt).toISOString().split("T")[0],
+          keywords: r.keywords || [],
+          user: userEmail, // ✅ Display email
+          categories: toCategory(r.parameters?.data_type),
+          reportLink: reportLink,
+          reportId: reportId,
+        };
+      }).filter(r => r.reportId); // ✅ Only include reports with valid IDs
+
+      return {
+        reports,
+        total: response.total,
+        totalPages: response.total_pages,
+        currentPage: response.page,
+        totalUsers: analytics.totalUsers,
+        reportsGenerated: analytics.reportsGenerated,
+      };
+    } catch (error) {
+      console.error("❌ Error fetching admin reports:", error);
+      return {
+        reports: [],
+        total: 0,
+        totalPages: 0,
+        currentPage: 1,
+        totalUsers: 0,
+        reportsGenerated: 0,
+      };
+    }
+  },
+
+  async getUserReports(
+    page: number = 1,
+    pageSize: number = 10
+  ): Promise<{
+    reports: Report[];
+    total: number;
+    totalPages: number;
+    currentPage: number;
+  }> {
+    try {
+      const response = await apiRequest<ReportsResponse>(
+        `/api/reports?page=${page}&page_size=${pageSize}`
+      );
+
+      const reports: Report[] = response.reports
+        .map((r, index) => {
+          const reportId = r.report_id || r.reportId;
+          
+          if (!reportId) {
+            console.error(`❌ User report ${index} missing report_id`);
+            return null;
+          }
+
+          return {
+            id: (page - 1) * pageSize + index + 1,
+            date: new Date(r.created_at).toISOString().split("T")[0],
+            keywords: r.keywords || [],
+            user: "Me",
+            categories: toCategory(r.parameters?.data_type),
+            reportLink: r.report_link || r.reportLink,
+            reportId: reportId,
+          };
+        })
+        .filter(r => r !== null) as Report[];
+
+      return {
+        reports,
+        total: response.total,
+        totalPages: response.total_pages,
+        currentPage: response.page,
+      };
+    } catch (error) {
+      console.error("❌ Error fetching user reports:", error);
+      return {
+        reports: [],
+        total: 0,
+        totalPages: 0,
+        currentPage: 1,
+      };
+    }
+  },
+
+  async getUserOwnReports(): Promise<Report[]> {
+    try {
+      const response = await apiRequest<{
+        reports: BackendReport[];
+      }>("/api/reports");
+
+      return response.reports
+        .map((r, index): Report | null => {
+          const reportId = r.report_id || r.reportId;
+          
+          if (!reportId) {
+            console.error(`❌ User own report ${index} missing report_id`);
+            return null;
+          }
+
+          return {
+            id: index + 1,
+            date: new Date(r.created_at).toISOString().split("T")[0],
+            keywords: r.keywords || [],
+            user: "current_user",
+            categories: toCategory(r.parameters?.data_type),
+            reportLink: r.report_link || r.reportLink,
+            reportId: reportId,
+          };
+        })
+        .filter((r): r is Report => r !== null);
+    } catch (error) {
+      console.error("❌ Error fetching user reports:", error);
+      return [];
+    }
+  },
+
+ async downloadReport(searchId: string): Promise<void> {
   try {
-    // console.log("📊 Fetching current user's reports...");
+ 
 
-    const response = await apiRequest<{
-      reports: BackendReport[];
-    }>("/api/reports");
+    if (!searchId || searchId === "undefined" || searchId === "null") {
+      throw new Error("Invalid search ID");
+    }
 
-    console.log(`✅ User reports fetched: ${response.reports.length}`);
+    const response = await fetch(
+      `${API_BASE_URL}/api/download-report/${searchId}`,
+      {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("auth_token")}`,
+        },
+      }
+    );
 
-    return response.reports.map((r, index): Report => ({
-      id: index + 1,
-      date: new Date(r.created_at).toISOString().split("T")[0],
-      keywords: r.keywords || [],
-      user: "current_user",
-      categories: toCategory(r.parameters?.data_type),
-      report_link: r.report_link,
-      report_id: r.report_id,
-    }));
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("❌ Error response:", errorText);
+      throw new Error(`Failed to download report: ${response.status} - ${errorText}`);
+    }
+
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `report-${searchId}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+    
+    console.log("✅ Download successful!");
   } catch (error) {
-    console.error("❌ Error fetching user reports:", error);
-    return [];
+    console.error("❌ Error downloading report:", error);
+    throw error;
   }
 },
 
-  async downloadReport(reportId: string): Promise<void> {
-    try {
-      // console.log("📥 Downloading report:", reportId);
-      // console.log("🔑 Using token:", localStorage.getItem("auth_token"));
-      
-      const response = await fetch(
-        `${API_BASE_URL}/api/download-report/${reportId}`,
-        {
-          method: "GET",
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem("auth_token")}`,
-          },
-        }
-      );
+async fetchReportBlob(searchId: string): Promise<Blob> {
+  console.log("👁️ Attempting to view report:", searchId);
 
-      // console.log("📥 Response status:", response.status);
-      // console.log("📥 Response headers:", response.headers);
+  if (!searchId || searchId === "undefined" || searchId === "null") {
+    throw new Error("Invalid search ID");
+  }
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error("❌ Error response:", errorText);
-        throw new Error(`Failed to download report: ${response.status} - ${errorText}`);
-      }
-
-      const blob = await response.blob();
-      // console.log("📥 Blob size:", blob.size, "bytes");
-      // console.log("📥 Blob type:", blob.type);
-      
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `report-${reportId}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-      
-      console.log("✅ Download successful!");
-    } catch (error) {
-      console.error("❌ Error downloading report:", error);
-      throw error;
+  const response = await fetch(
+    `${API_BASE_URL}/api/download-report/${searchId}`,
+    {
+      headers: {
+        Authorization: `Bearer ${localStorage.getItem("auth_token")}`,
+      },
     }
-  },
-
-  async fetchReportBlob(reportId: string): Promise<Blob> {
-  const response = await fetch(`${API_BASE_URL}/api/download-report/${reportId}`, {
-    headers: {
-      Authorization: `Bearer ${localStorage.getItem('auth_token')}`,
-    },
-  });
-  if (!response.ok) throw new Error(`Failed to fetch PDF: ${response.statusText}`);
+  );
+  
+  if (!response.ok) {
+    throw new Error(`Failed to fetch PDF: ${response.statusText}`);
+  }
+  
   return await response.blob();
-}
+},
 
 };
