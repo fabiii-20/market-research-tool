@@ -47,6 +47,19 @@ export default function AdminDashboard() {
 
   const firstLetter = email.charAt(0).toUpperCase();
 
+  useEffect(() => {
+  const fetchAnalytics = async () => {
+    try {
+      const analytics = await reportAPI.getAnalytics();
+      setTotalUsers(analytics.totalUsers);
+      setReportsGenerated(analytics.reportsGenerated);
+    } catch (error) {
+      console.error("Error fetching analytics:", error);
+    }
+  };
+  fetchAnalytics();
+}, []);
+
   // Close dropdowns
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -96,14 +109,11 @@ const loadReports = async () => {
   try {
     setLoading(true);
 
-    // Convert email to user ID
     let userIdToUse = selectedUser;
-    
     if (selectedUser !== "All Users" && selectedUser !== "all") {
       userIdToUse = userIdMap[selectedUser] || selectedUser;
     }
 
-    // ✅ Use NEW endpoint instead of getAdminReports
     const data = await reportAPI.getAdminSearchResults(
       userIdToUse === "All Users" ? "all" : userIdToUse,
       reportsPage,
@@ -111,18 +121,19 @@ const loadReports = async () => {
       fromDate,
       toDate
     );
-    
+
     setReports(data.reports);
     setReportsTotalPages(data.totalPages);
     setReportsTotal(data.total);
-    setTotalUsers(data.totalUsers);
-    setReportsGenerated(data.reportsGenerated);
+
+    
   } catch (error) {
     console.error("❌ Error loading reports:", error);
   } finally {
     setLoading(false);
   }
 };
+
 
   const handleFilter = () => {
     setReportsPage(1);
@@ -151,18 +162,19 @@ const loadReports = async () => {
     }
   };
 
-  const handleDownloadReport = async (reportId: string) => {
-    try {
-      if (!reportId) {
-        alert("Report ID is missing.");
-        return;
-      }
-      await reportAPI.downloadReport(reportId);
-    } catch (error) {
-      console.error("❌ Download failed:", error);
-      alert("Failed to download report. Please try again.");
+  const handleDownloadReport = async (searchId: string) => {
+  try {
+    if (!searchId) {
+      alert("Search ID is missing.");
+      return;
     }
-  };
+    await reportAPI.downloadReport(searchId);
+  } catch (error) {
+    console.error("❌ Download failed:", error);
+    alert("Failed to download report. Please try again.");
+  }
+};
+
 
   const handleLogout = () => {
     authService.logout();
