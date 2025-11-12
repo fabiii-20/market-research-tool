@@ -549,7 +549,7 @@ const loadReports = async () => {
                 {/* Header */}
                 <div className="px-4 sm:px-6 py-3 md:py-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 border-b border-gray-700/50">
                   <h2 className="text-sm md:text-lg font-semibold text-white">
-                    Generated Reports {reportsTotal > 0 && `(${reportsTotal})`}
+                    Total Searches {reportsTotal > 0 && `(${reportsTotal})`}
                   </h2>
 
                   {/* User Select Dropdown */}
